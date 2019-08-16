@@ -10,6 +10,7 @@ import os
 from itertools import repeat
 
 from store import Store
+from vk import watch_wall_posts
 
 logger = logging.getLogger('bot')
 
@@ -24,6 +25,7 @@ if __name__ == '__main__':
     parser.add_argument('--vk-app-scope', help='vk.com registered app SCOPE in "SCOPE_1, SCOPE_2...SCOPE_N" format')
     parser.add_argument('--vk-user-auth', help='vk.com user credentials in "login:password" format')
     parser.add_argument('--vk-group-id')
+    parser.add_argument('--send-post-timeout')
     parser.add_argument('--telegram-bot-token', help='telegram bot token given by BotFather bot')
     parser.add_argument('--proxy-url', help='proxy server url')
     parser.add_argument('--proxy-auth', help='proxy server credentials in <login:password> format')
@@ -87,23 +89,19 @@ if __name__ == '__main__':
     logger.info(f'use vk session app_scope={app_scope}')
     user_auth = get_config_value('vk_user_auth', required=True)
     username, password = get_username_password(user_auth)
-    logger.info(f'use vk session user_auth{username}:{password}')
+    logger.info(f'use vk session user_auth={username}:{password}')
 
     session = aiovk.ImplicitSession(login=username, password=password,
                                     app_id=app_id, scope=app_scope)
 
-    async def send_photos(chat_id, photo_urls):
-        media = aiogram.types.MediaGroup()
-        for photo_url in photo_urls:
-            media.attach_photo(photo_url)
-
-        await bot.send_media_group(chat_id, media=media)
-
     api = aiovk.API(session=session)
 
     group_id = get_config_value('vk_group_id', required=True)
-    group_id = f'-{group_id}'
-    logger.info(f'use vk group_id={group_id}')
+    owner_id = f'-{group_id}'
+    logger.info(f'use vk owner_id={owner_id}')
+
+    send_post_timeout = get_config_value('send_post_timeout', required=True)
+    logger.info(f'use send_post_timeout={send_post_timeout}')
 
     def get_photo_url(item):
         return item.get('photo_2560', item.get('photo_1280', item.get('photo_807', None)))
@@ -112,74 +110,59 @@ if __name__ == '__main__':
         return [url for url in (get_photo_url(attach['photo'])
                                 for attach in item.get('attachments', []) if attach['type'] == 'photo') if url]
 
-    async def publish_posts():
+    async def send_chat_posts(chat_id):
+        item = store.get_wall_post_to_send(chat_id=chat_id, owner_id=owner_id)
+        if item:
+            logger.info(f'send posts to chat_id={chat_id} post_id={item["post_id"]}, photos={item["photos"]}')
+            media = aiogram.types.MediaGroup()
+            for photo in item['photos']:
+                media.attach_photo(photo['url'])
+            await bot.send_media_group(chat_id, media=media)
+
+            store.add_chat_post(chat_id=chat_id, owner_id=owner_id, post_id=item['post_id'])
+            logger.info(f'post sent chat_id={chat_id}, owner_id={owner_id}, post_id={item["owner_id"]}')
+
+    async def send_posts():
         chat_ids = list(store.get_chat_ids())
-        sent_posts_count = dict(zip(chat_ids, repeat(0, len(chat_ids))))
-        logger.info(f'publish posts chat_ids: {chat_ids}')
+        logger.info(f'send posts to chat_ids: {chat_ids}')
 
-        offset = 0
+        futures = (send_chat_posts(chat_id) for chat_id in chat_ids)
+        if futures:
+            await asyncio.gather(*futures)
 
-        while all(count < MAX_COUNT for count in sent_posts_count.values()):
-            await asyncio.sleep(10)  # TODO: replace with items per limit from aiovk
-
-            response = await api.wall.get(owner_id=group_id, offset=offset, count=3, filter='all', extended=0)
-
-            items = response['items']
-
-            logger.debug(f'received posts offset={offset}, count={len(items)}')
-
-            def should_publish(item):
-                if not store.is_post_sent(chat_id, item['id'], item['owner_id']):
-                    return item and get_photo_urls(item)
-
-            while True:  # Collect if it's possible and request more another case
-                send_post_futures = []
-                for chat_id in sent_posts_count.keys():
-                    if sent_posts_count[chat_id] >= MAX_COUNT:
-                        continue
-                    post = next((item for item in items if should_publish(item)), None)
-                    photo_urls = post and get_photo_urls(post)
-                    logging.debug(f'post photos chat_id={chat_id}, photo_urls={photo_urls}')
-                    if photo_urls:
-                        send_post_futures.append(send_photos(chat_id, photo_urls))
-                        store.set_post_sent(chat_id, post['id'], post['owner_id'])  # TODO: not so good time before sending
-                        sent_posts_count[chat_id] += 1
-
-                logger.debug(f'send photos futures count={len(send_post_futures)}')
-                if send_post_futures:  # TODO: OMFG what is cycle in cycle duplication
-                    await asyncio.gather(*send_post_futures)
-                else:
-                    break
-
-            logger.info(f'publish posts count: {sent_posts_count}')
-
-            if not items:
-                return sent_posts_count
-            else:
-                offset += len(items)
-
-
-    async def watch_send_photos():
+    async def watch_send_posts():
         while True:
-            logger.info('publish posts started')
-            await publish_posts()
-            logger.info('publish posts completed')
-            await asyncio.sleep(500)
+            logger.info('watch send posts')
+            await send_posts()
 
+            logger.info(f'sleep for 60secs')
+            await asyncio.sleep(send_post_timeout)
 
     dispatcher = aiogram.Dispatcher(bot=bot)
 
-
     @dispatcher.message_handler(commands=['start', ])
-    async def subscribe(message: aiogram.types.Message):
-        logger.info(f'subscribe chat: {message.chat.id}')
-        store.add_chat_id(message.chat.id)
+    async def start(message: aiogram.types.Message):
         await bot.send_message(message.chat.id,
-                               "Hi!\nI'm dovkin!\nPowered by @alexanderolarin.\nYou're subscribed")
+                               "Hi!\nI'm DoVkIn!\nPowered by @alexanderolarin\nJust type /subscribe command")
+
+
+    @dispatcher.message_handler(commands=['subscribe', ])
+    async def subscribe(message: aiogram.types.Message):
+        store.add_chat(message.chat.id)
+        logger.info(f'subscribe chat: {message.chat.id}')
+        await bot.send_message(message.chat.id,
+                               "Keep Nude and Panties Off!\nYou're subscribed")
+
+    @dispatcher.message_handler(commands=['unsubscribe', ])
+    async def unsubscribe(message: aiogram.types.Message):
+        store.remove_chat(message.chat.id)
+        logger.info(f'unsubscribe chat: {message.chat.id}')
+        await bot.send_message(message.chat.id,
+                               "Oh nooo!\nYou're unsubscribed")
 
 
     loop = asyncio.get_event_loop()
-    loop.create_task(watch_send_photos())
+    asyncio.gather(watch_wall_posts(api, store, owner_id), watch_send_posts(), loop=loop)
 
     logger.info('init polling')
     aiogram.executor.start_polling(dispatcher, loop=loop)
