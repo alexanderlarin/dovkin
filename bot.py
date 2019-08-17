@@ -26,6 +26,7 @@ if __name__ == '__main__':
     parser.add_argument('--vk-user-auth', help='vk.com user credentials in "login:password" format')
     parser.add_argument('--vk-group-id')
     parser.add_argument('--send-post-timeout')
+    parser.add_argument('--get-posts-timeout')
     parser.add_argument('--telegram-bot-token', help='telegram bot token given by BotFather bot')
     parser.add_argument('--proxy-url', help='proxy server url')
     parser.add_argument('--proxy-auth', help='proxy server credentials in <login:password> format')
@@ -102,6 +103,8 @@ if __name__ == '__main__':
 
     send_post_timeout = get_config_value('send_post_timeout', required=True)
     logger.info(f'use send_post_timeout={send_post_timeout}')
+    get_posts_timeout = get_config_value('get_posts_timeout', required=True)
+    logger.info(f'use get_posts_timeout={get_posts_timeout}')
 
     def get_photo_url(item):
         return item.get('photo_2560', item.get('photo_1280', item.get('photo_807', None)))
@@ -162,7 +165,9 @@ if __name__ == '__main__':
 
 
     loop = asyncio.get_event_loop()
-    asyncio.gather(watch_wall_posts(api, store, owner_id), watch_send_posts(), loop=loop)
+    loop.create_task(watch_wall_posts(api, store, owner_id,
+                                      get_posts_timeout=get_posts_timeout))
+    loop.create_task(watch_send_posts())
 
     logger.info('init polling')
     aiogram.executor.start_polling(dispatcher, loop=loop)

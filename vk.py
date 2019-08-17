@@ -17,49 +17,54 @@ def get_photos(item):
     return [photo for photo in photos if photo['url']]
 
 
-async def watch_wall_posts(api: aiovk.API, store: Store, owner_id, request_posts_limit=5, required_posts_count=10):
+async def get_wall_posts(api: aiovk.API, store: Store, owner_id, request_posts_limit, required_posts_count):
+    offset = 0
+    posts_saved_count = 0
+
+    while posts_saved_count < required_posts_count:
+        logger.debug(f'wall posts query offset={offset}, count={request_posts_limit}')
+
+        response = await api.wall.get(owner_id=owner_id,
+                                      offset=offset,
+                                      count=request_posts_limit, extended=0, filter='all')
+
+        count = response['count']
+        items = response['items']
+
+        logger.debug(f'wall posts owner_id={owner_id} items count={len(items)} received (total count={count})')
+
+        if store.get_wall_posts_count(owner_id=owner_id) >= count:
+            logger.info(f'wall posts owner_id={owner_id} are saved')
+            return False
+
+        items = ({
+            'post_id': item['id'],
+            'date': item['date'],
+            'photos': get_photos(item)
+        } for item in response['items']
+            if not store.is_wall_post_exists(post_id=item['id'], owner_id=owner_id))
+        items = [item for item in items if item['photos']]
+
+        for item in items:
+            store.add_wall_post(owner_id=owner_id, **item)
+
+        offset += len(response['items'])
+        posts_saved_count += len(items)
+        logger.debug(
+            f'wall posts owner_id={owner_id} items count={len(items)} saved (total count={posts_saved_count})')
+
+        sleep_for_secs = 10
+        logger.debug(f'wall posts sleep for {sleep_for_secs}secs')
+        await asyncio.sleep(sleep_for_secs)
+
+
+async def watch_wall_posts(api: aiovk.API, store: Store, owner_id, get_posts_timeout,
+                           request_posts_limit=10, required_posts_count=30):
     while True:
-        offset = 0
-        posts_saved_count = 0
-
-        while posts_saved_count < required_posts_count:
-            logger.debug(f'wall posts query offset={offset}, count={request_posts_limit}')
-
-            response = await api.wall.get(owner_id=owner_id,
-                                          offset=offset,
-                                          count=request_posts_limit, extended=0, filter='all')
-
-            count = response['count']
-            items = response['items']
-
-            logger.debug(f'wall posts owner_id={owner_id} items count={len(items)} received (total count={count})')
-
-            if store.get_wall_posts_count(owner_id=owner_id) >= count:
-                logger.info(f'wall posts owner_id={owner_id} are saved')
-                return False
-
-            items = ({
-                'post_id': item['id'],
-                'date': item['date'],
-                'photos': get_photos(item)
-            } for item in response['items']
-                if not store.is_wall_post_exists(post_id=item['id'], owner_id=owner_id))
-            items = [item for item in items if item['photos']]
-
-            for item in items:
-                store.add_wall_post(owner_id=owner_id, **item)
-
-            offset += len(response['items'])
-            posts_saved_count += len(items)
-            logger.debug(
-                f'wall posts owner_id={owner_id} items count={len(items)} saved (total count={posts_saved_count})')
-
-            sleep_for_secs = 3
-            logger.debug(f'wall posts sleep for {sleep_for_secs}secs')
-            await asyncio.sleep(sleep_for_secs)
+        await get_wall_posts(api, store, owner_id, request_posts_limit, required_posts_count)
 
         logger.info(
             f'watch wall posts owner_id={owner_id} items count={store.get_wall_posts_count(owner_id)} total saved')
 
-        logger.info(f'watch wall posts sleep for 5secs')
-        await asyncio.sleep(60)
+        logger.info(f'watch wall posts sleep for {get_posts_timeout}secs')
+        await asyncio.sleep(get_posts_timeout)
