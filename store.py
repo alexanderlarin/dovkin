@@ -5,6 +5,9 @@ class Store:
     def __init__(self, path):
         self._db = TinyDB(path)
 
+    def close(self):
+        self._db.close()
+
     @property
     def chats(self):
         return self._db.table('chats')

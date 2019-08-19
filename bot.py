@@ -7,10 +7,8 @@ import json
 import logging
 import os
 
-from itertools import repeat
-
 from store import Store
-from vk import watch_wall_posts
+from vk import walk_wall_posts
 
 logger = logging.getLogger('bot')
 
@@ -25,8 +23,9 @@ if __name__ == '__main__':
     parser.add_argument('--vk-app-scope', help='vk.com registered app SCOPE in "SCOPE_1, SCOPE_2...SCOPE_N" format')
     parser.add_argument('--vk-user-auth', help='vk.com user credentials in "login:password" format')
     parser.add_argument('--vk-group-id')
-    parser.add_argument('--send-post-timeout')
-    parser.add_argument('--get-posts-timeout')
+    parser.add_argument('--send-posts-timeout')
+    parser.add_argument('--walk-posts-timeout')
+    parser.add_argument('--update-posts-timeout')
     parser.add_argument('--telegram-bot-token', help='telegram bot token given by BotFather bot')
     parser.add_argument('--proxy-url', help='proxy server url')
     parser.add_argument('--proxy-auth', help='proxy server credentials in <login:password> format')
@@ -93,18 +92,20 @@ if __name__ == '__main__':
     logger.info(f'use vk session user_auth={username}:{password}')
 
     session = aiovk.ImplicitSession(login=username, password=password,
-                                    app_id=app_id, scope=app_scope)
+                                    app_id=app_id, scope=app_scope, timeout=30)
 
     api = aiovk.API(session=session)
 
     group_id = get_config_value('vk_group_id', required=True)
-    owner_id = f'-{group_id}'
+    owner_id = -group_id  # Because it's a group id
     logger.info(f'use vk owner_id={owner_id}')
 
-    send_post_timeout = get_config_value('send_post_timeout', required=True)
-    logger.info(f'use send_post_timeout={send_post_timeout}')
-    get_posts_timeout = get_config_value('get_posts_timeout', required=True)
-    logger.info(f'use get_posts_timeout={get_posts_timeout}')
+    send_posts_timeout = get_config_value('send_posts_timeout', required=True)
+    logger.info(f'use send_posts_timeout={send_posts_timeout}')
+    walk_posts_timeout = get_config_value('walk_posts_timeout', required=True)
+    logger.info(f'use walk_posts_timeout={walk_posts_timeout}')
+    update_posts_timeout = get_config_value('update_posts_timeout', required=True)
+    logger.info(f'use update_posts_timeout={update_posts_timeout}')
 
     def get_photo_url(item):
         return item.get('photo_2560', item.get('photo_1280', item.get('photo_807', None)))
@@ -137,9 +138,22 @@ if __name__ == '__main__':
         while True:
             logger.info('watch send posts')
             await send_posts()
+            logger.info(f'watch send posts sleep for {send_posts_timeout}secs')
+            await asyncio.sleep(send_posts_timeout)
 
-            logger.info(f'sleep for 60secs')
-            await asyncio.sleep(send_post_timeout)
+    async def watch_update_posts():
+        while True:
+            logger.info('watch update posts')
+            await walk_wall_posts(api, store, owner_id, loop_to_end=False)
+            logger.info(f'watch update posts sleep for {update_posts_timeout}secs')
+            await asyncio.sleep(update_posts_timeout)
+
+    async def watch_walk_posts():
+        while True:
+            logger.info('watch walk posts')
+            await walk_wall_posts(api, store, owner_id, loop_to_end=True)
+            logger.info(f'watch walk posts sleep for {walk_posts_timeout}secs')
+            await asyncio.sleep(walk_posts_timeout)
 
     dispatcher = aiogram.Dispatcher(bot=bot)
 
@@ -152,24 +166,27 @@ if __name__ == '__main__':
     @dispatcher.message_handler(commands=['subscribe', ])
     async def subscribe(message: aiogram.types.Message):
         store.add_chat(message.chat.id)
-        logger.info(f'subscribe chat: {message.chat.id}')
         await bot.send_message(message.chat.id,
                                "Keep Nude and Panties Off!\nYou're subscribed")
+        asyncio.ensure_future(send_chat_posts(message.chat.id))
+        logger.info(f'subscribe chat: {message.chat.id}, send immediately')
 
     @dispatcher.message_handler(commands=['unsubscribe', ])
     async def unsubscribe(message: aiogram.types.Message):
         store.remove_chat(message.chat.id)
-        logger.info(f'unsubscribe chat: {message.chat.id}')
         await bot.send_message(message.chat.id,
-                               "Oh nooo!\nYou're unsubscribed")
+                               "Oh no!\nYou're unsubscribed")
+        logger.info(f'unsubscribe chat: {message.chat.id}')
 
 
-    loop = asyncio.get_event_loop()
-    loop.create_task(watch_wall_posts(api, store, owner_id,
-                                      get_posts_timeout=get_posts_timeout))
-    loop.create_task(watch_send_posts())
+    try:
+        asyncio.ensure_future(watch_send_posts())
+        asyncio.ensure_future(watch_update_posts())
+        asyncio.ensure_future(watch_walk_posts())
 
-    logger.info('init polling')
-    aiogram.executor.start_polling(dispatcher, loop=loop)
-    session.close()
+        logger.info('init polling')
+        aiogram.executor.start_polling(dispatcher)
+    finally:
+        session.close()
+        store.close()
 
