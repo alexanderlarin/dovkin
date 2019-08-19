@@ -12,8 +12,6 @@ from vk import walk_wall_posts
 
 logger = logging.getLogger('bot')
 
-MAX_COUNT = 5
-
 
 if __name__ == '__main__':
     parser = argparse.ArgumentParser(description='Telegram bot for vk.com photos gathering in messenger chat',
@@ -137,7 +135,13 @@ if __name__ == '__main__':
     async def watch_send_posts():
         while True:
             logger.info('watch send posts')
-            await send_posts()
+            
+            try:  # TODO: it's not good place for this feature
+                await send_posts()
+            except Exception as ex:
+                logger.exception(ex)
+                logger.error('watch send posts totally failed')
+
             logger.info(f'watch send posts sleep for {send_posts_timeout}secs')
             await asyncio.sleep(send_posts_timeout)
 
