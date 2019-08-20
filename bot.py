@@ -113,6 +113,7 @@ if __name__ == '__main__':
                                 for attach in item.get('attachments', []) if attach['type'] == 'photo') if url]
 
     async def send_chat_posts(chat_id):
+        logger.info(f'search posts for chat_id={chat_id}')
         item = store.get_wall_post_to_send(chat_id=chat_id, owner_id=owner_id)
         if item:
             logger.info(f'send posts to chat_id={chat_id} post_id={item["post_id"]}, photos={item["photos"]}')
@@ -135,7 +136,7 @@ if __name__ == '__main__':
     async def watch_send_posts():
         while True:
             logger.info('watch send posts')
-            
+
             try:  # TODO: it's not good place for this feature
                 await send_posts()
             except Exception as ex:
@@ -147,10 +148,11 @@ if __name__ == '__main__':
 
     async def watch_update_posts():
         while True:
-            logger.info('watch update posts')
-            await walk_wall_posts(api, store, owner_id, loop_to_end=False)
+            # Sleep before dut to watch posts may be in progress
             logger.info(f'watch update posts sleep for {update_posts_timeout}secs')
             await asyncio.sleep(update_posts_timeout)
+            logger.info('watch update posts')
+            await walk_wall_posts(api, store, owner_id, loop_to_end=False)
 
     async def watch_walk_posts():
         while True:
@@ -185,8 +187,8 @@ if __name__ == '__main__':
 
     try:
         asyncio.ensure_future(watch_send_posts())
-        asyncio.ensure_future(watch_update_posts())
         asyncio.ensure_future(watch_walk_posts())
+        asyncio.ensure_future(watch_update_posts())
 
         logger.info('init polling')
         aiogram.executor.start_polling(dispatcher)
