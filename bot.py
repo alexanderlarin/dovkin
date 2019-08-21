@@ -127,21 +127,23 @@ if __name__ == '__main__':
 
     async def send_posts():
         chat_ids = list(store.get_chat_ids())
-        logger.info(f'send posts to chat_ids: {chat_ids}')
+        logger.info(f'send posts to chat_ids={chat_ids}')
 
-        futures = (send_chat_posts(chat_id) for chat_id in chat_ids)
-        if futures:
-            await asyncio.gather(*futures)
+        for chat_id in chat_ids:
+            try:
+                await send_chat_posts(chat_id)
+            except Exception as ex:
+                logger.error(f'send posts to chat_id={chat_id} failed')
+                logger.exception(ex)
 
     async def watch_send_posts():
         while True:
-            logger.info('watch send posts')
-
-            try:  # TODO: it's not good place for this feature
+            try:
+                logger.info('watch send posts started')
                 await send_posts()
             except Exception as ex:
+                logger.error('watch send posts failed')
                 logger.exception(ex)
-                logger.error('watch send posts totally failed')
 
             logger.info(f'watch send posts sleep for {send_posts_timeout}secs')
             await asyncio.sleep(send_posts_timeout)
@@ -151,13 +153,23 @@ if __name__ == '__main__':
             # Sleep before dut to watch posts may be in progress
             logger.info(f'watch update posts sleep for {update_posts_timeout}secs')
             await asyncio.sleep(update_posts_timeout)
-            logger.info('watch update posts')
-            await walk_wall_posts(api, store, owner_id, loop_to_end=False)
+
+            try:
+                logger.info('watch update posts started')
+                await walk_wall_posts(api, store, owner_id, loop_to_end=False)
+            except Exception as ex:
+                logger.error('watch update posts failed')
+                logger.exception(ex)
 
     async def watch_walk_posts():
         while True:
-            logger.info('watch walk posts')
-            await walk_wall_posts(api, store, owner_id, loop_to_end=True)
+            try:
+                logger.info('watch walk posts started')
+                await walk_wall_posts(api, store, owner_id, loop_to_end=True)
+            except Exception as ex:
+                logger.error('watch walk posts failed')
+                logger.exception(ex)
+
             logger.info(f'watch walk posts sleep for {walk_posts_timeout}secs')
             await asyncio.sleep(walk_posts_timeout)
 

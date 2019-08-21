@@ -1,5 +1,6 @@
 import asyncio
 import aiovk
+import backoff
 import logging
 
 from collections import namedtuple
@@ -22,6 +23,7 @@ def get_photos(item):
     return [photo for photo in photos if photo['url']]
 
 
+@backoff.on_exception(backoff.expo, Exception, max_tries=5)
 async def get_wall_posts(api, owner_id, offset, limit):
     logger.debug(f'wall posts query owner_id={owner_id} offset={offset} limit={limit}')
     response = await api.wall.get(owner_id=owner_id, offset=offset, count=limit, extended=0, filter='all')
@@ -31,27 +33,12 @@ async def get_wall_posts(api, owner_id, offset, limit):
     return response['items'], response['count']
 
 
-MAX_RETRIES = 5
-
-
 async def walk_wall_posts(api: aiovk.API, store: Store,
                           owner_id, loop_to_end, posts_per_request_limit=30, timeout_between_requests=10):
     offset = 0
-    retries_count = 0
 
     while True:
-        try:  # TODO: it's not good place for this feature
-            items, count = await get_wall_posts(api, owner_id=owner_id, offset=offset, limit=posts_per_request_limit)
-        except Exception as ex:
-            logger.exception(ex)
-            if retries_count < MAX_RETRIES:
-                retries_count += 1
-                logger.warning(f'walk wall posts owner_id={owner_id} offset={offset} '
-                               f'limit={posts_per_request_limit} retry={retries_count}')
-                continue
-            else:
-                logger.error(f'walk wall posts totally failed')
-                break
+        items, count = await get_wall_posts(api, owner_id=owner_id, offset=offset, limit=posts_per_request_limit)
 
         if not len(items):
             logger.info(f'walk wall posts owner_id={owner_id}, end of wall is reached count={count}')
