@@ -34,7 +34,7 @@ async def get_wall_posts(api, owner_id, offset, limit):
 
 
 async def walk_wall_posts(api: aiovk.API, store: Store,
-                          owner_id, loop_to_end, posts_per_request_limit=30, timeout_between_requests=10):
+                          owner_id, max_posts_offset=None, posts_per_request_limit=30, timeout_between_requests=10):
     offset = 0
 
     while True:
@@ -55,14 +55,15 @@ async def walk_wall_posts(api: aiovk.API, store: Store,
             for item in store_items:
                 store.add_wall_post(**item._asdict())
 
-            if not loop_to_end and not len(store_items):
-                logger.info(f'walk wall posts ends due to nothing to store')
+            offset += len(items)
+
+            if max_posts_offset and offset > max_posts_offset:
+                logger.info(f'walk wall posts ends due to offset={offset} '
+                            f'is greater than max_posts_offset={max_posts_offset}')
                 break
             else:
                 logger.info(f'walk store posts owner_id={owner_id} '
                             f'count={len(store_items)} of {store.get_wall_posts_count(owner_id)}, continue')
-
-            offset += len(items)
 
             logger.debug(f'wall posts sleep for {timeout_between_requests}secs')
             await asyncio.sleep(timeout_between_requests)

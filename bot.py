@@ -156,7 +156,7 @@ if __name__ == '__main__':
 
             try:
                 logger.info('watch update posts started')
-                await walk_wall_posts(api, store, owner_id, loop_to_end=False)
+                await walk_wall_posts(api, store, owner_id, max_posts_offset=30)
             except Exception as ex:
                 logger.error('watch update posts failed')
                 logger.exception(ex)
@@ -165,7 +165,7 @@ if __name__ == '__main__':
         while True:
             try:
                 logger.info('watch walk posts started')
-                await walk_wall_posts(api, store, owner_id, loop_to_end=True)
+                await walk_wall_posts(api, store, owner_id)
             except Exception as ex:
                 logger.error('watch walk posts failed')
                 logger.exception(ex)
