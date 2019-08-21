@@ -10,6 +10,7 @@ aiohttp = "*"
 aiovk = "*"
 aiogram = "*"
 tinydb = "*"
+backoff = "*"
 
 [requires]
 python_version = "3.7"

@@ -5,6 +5,9 @@ class Store:
     def __init__(self, path):
         self._db = TinyDB(path)
 
+    def close(self):
+        self._db.close()
+
     @property
     def chats(self):
         return self._db.table('chats')
@@ -54,9 +57,8 @@ class Store:
         return self.wall_posts.count(where('owner_id') == owner_id)
 
     def get_wall_post_to_send(self, chat_id, owner_id):
-        items = sorted((
-            item for item in self.wall_posts.search(where('owner_id') == owner_id)
-            if not self.is_chat_post_exists(chat_id=chat_id, post_id=item['post_id'], owner_id=owner_id)
-        ), key=lambda post: post['date'], reverse=True)
-        if items:
-            return items[0]
+        items = sorted(self.wall_posts.search(where('owner_id') == owner_id),
+                       key=lambda post: post['date'], reverse=True)
+        return next((item for item in items
+                     if not self.is_chat_post_exists(chat_id=chat_id,
+                                                     post_id=item['post_id'], owner_id=owner_id)), None)
