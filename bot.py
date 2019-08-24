@@ -90,7 +90,7 @@ if __name__ == '__main__':
     logger.info(f'use vk session user_auth={username}:{password}')
 
     session = aiovk.ImplicitSession(login=username, password=password,
-                                    app_id=app_id, scope=app_scope, timeout=30)
+                                    app_id=app_id, scope=app_scope)
 
     api = aiovk.API(session=session)
 
@@ -196,15 +196,17 @@ if __name__ == '__main__':
                                "Oh no!\nYou're unsubscribed")
         logger.info(f'unsubscribe chat: {message.chat.id}')
 
-
-    try:
+    async def startup(_):
+        logger.info('startup callbacks')
         asyncio.ensure_future(watch_send_posts())
         asyncio.ensure_future(watch_walk_posts())
         asyncio.ensure_future(watch_update_posts())
 
-        logger.info('init polling')
-        aiogram.executor.start_polling(dispatcher)
-    finally:
-        session.close()
+    async def shutdown():
+        logger.info('shutdown callbacks')
+        await session.close()
         store.close()
 
+    logger.info('init polling')
+    aiogram.executor.start_polling(dispatcher,
+                                   on_startup=startup, on_shutdown=shutdown)

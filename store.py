@@ -1,9 +1,11 @@
 from tinydb import TinyDB, where
+from tinydb.middlewares import CachingMiddleware
+from tinydb.storages import JSONStorage
 
 
 class Store:
     def __init__(self, path):
-        self._db = TinyDB(path)
+        self._db = TinyDB(path, storage=CachingMiddleware(JSONStorage))
 
     def close(self):
         self._db.close()
