@@ -1,4 +1,5 @@
 -i https://pypi.org/simple
+aiofiles==0.4.0
 aiogram==2.3
 aiohttp==3.5.4
 aiovk==3.0.0

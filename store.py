@@ -1,6 +1,10 @@
+import logging
+
 from tinydb import TinyDB, where
 from tinydb.middlewares import CachingMiddleware
 from tinydb.storages import JSONStorage
+
+logger = logging.getLogger(__name__)
 
 
 class Store:
@@ -52,8 +56,11 @@ class Store:
                                         (where('owner_id') == owner_id))
 
     def get_wall_post_ids(self, owner_id):
-        items = self.wall_posts.search(where('owner_id') == owner_id)
+        items = self.get_wall_posts(owner_id=owner_id)
         return (item['post_id'] for item in items)
+
+    def get_wall_posts(self, owner_id):
+        return self.wall_posts.search(where('owner_id') == owner_id)
 
     def get_wall_posts_count(self, owner_id):
         return self.wall_posts.count(where('owner_id') == owner_id)

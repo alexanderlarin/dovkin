@@ -1,4 +1,5 @@
 import asyncio
+import aiofiles
 import aiohttp
 import aiogram
 import aiovk
@@ -24,10 +25,12 @@ if __name__ == '__main__':
     parser.add_argument('--send-posts-timeout')
     parser.add_argument('--walk-posts-timeout')
     parser.add_argument('--update-posts-timeout')
+    parser.add_argument('--store-photos-timeout')
     parser.add_argument('--telegram-bot-token', help='telegram bot token given by BotFather bot')
     parser.add_argument('--proxy-url', help='proxy server url')
     parser.add_argument('--proxy-auth', help='proxy server credentials in <login:password> format')
     parser.add_argument('--store-file', default='db.tinydb', help='path to JSON-formatted local store file')
+    parser.add_argument('--store-photos-dir', help='path to downloaded photos store')
     parser.add_argument('--log-file', default='bot.log', help='log file path')
 
     args = parser.parse_args()
@@ -52,7 +55,7 @@ if __name__ == '__main__':
         logger.info(f'no config set, read from args')
 
     def get_config_value(key, required=False):
-        value = config[key] if config else args[key]
+        value = config.get(key) if config else args[key]
         if not value and required:
             raise ValueError(f'{key} value is required but was missed')
         return value
@@ -98,12 +101,23 @@ if __name__ == '__main__':
     owner_id = -group_id  # Because it's a group id
     logger.info(f'use vk owner_id={owner_id}')
 
+    store_photos_dir = get_config_value('store_photos_dir')
+    if store_photos_dir:
+        logger.info(f'use store_photos_dir={store_photos_dir}')
+        if not os.path.exists(store_photos_dir) or not os.path.isdir(store_photos_dir):
+            logger.warning(f'create store_photos_dir={store_photos_dir}')
+            os.makedirs(store_photos_dir)
+    else:
+        logger.warning(f'store_photos_dir is empty, no photos will be stored')
+
     send_posts_timeout = get_config_value('send_posts_timeout', required=True)
     logger.info(f'use send_posts_timeout={send_posts_timeout}')
     walk_posts_timeout = get_config_value('walk_posts_timeout', required=True)
     logger.info(f'use walk_posts_timeout={walk_posts_timeout}')
     update_posts_timeout = get_config_value('update_posts_timeout', required=True)
     logger.info(f'use update_posts_timeout={update_posts_timeout}')
+    store_photos_timeout = get_config_value('store_photos_timeout', required=store_photos_dir)
+    logger.info(f'use store_photos_timeout={store_photos_timeout}')
 
     def get_photo_url(item):
         return item.get('photo_2560', item.get('photo_1280', item.get('photo_807', None)))
@@ -135,6 +149,30 @@ if __name__ == '__main__':
             except Exception as ex:
                 logger.error(f'send posts to chat_id={chat_id} failed')
                 logger.exception(ex)
+
+    async def store_photos(max_store_photos=10):
+        logger.info(f'store photos for owner_id={owner_id}')
+        wall_posts = store.get_wall_posts(owner_id=owner_id)
+        store_photos_count = 0
+        for item in wall_posts:
+            for photo in item['photos']:
+                photo_url = photo['url']
+                _, ext = os.path.splitext(photo_url)
+                post_id = item['post_id']
+                photo_id = photo['id']
+                filename = os.path.join(store_photos_dir,
+                                        f'{owner_id}_{post_id}_{photo_id}{ext}')
+                if not os.path.exists(filename) or not os.path.isfile(filename):
+                    logger.debug(f'store photo photo_url={photo_url} to {filename}')
+                    data = await session.driver.get_bin(photo_url, params={})  # TODO: use separate session?
+                    async with aiofiles.open(filename, mode='wb') as s:
+                        await s.write(data)
+
+                    store_photos_count += 1
+                    logger.info(f'store photos count={store_photos_count} of {max_store_photos}')
+
+            if store_photos_count >= max_store_photos:
+                break
 
     async def watch_send_posts():
         while True:
@@ -173,6 +211,19 @@ if __name__ == '__main__':
             logger.info(f'watch walk posts sleep for {walk_posts_timeout}secs')
             await asyncio.sleep(walk_posts_timeout)
 
+
+    async def watch_store_photos():
+        while True:
+            try:
+                logger.info('watch store photos')
+                await store_photos()
+            except Exception as ex:
+                logger.error('watch store photos failed')
+                logger.exception(ex)
+
+            logger.info(f'watch store photos for {store_photos_timeout}secs')
+            await asyncio.sleep(store_photos_timeout)
+
     dispatcher = aiogram.Dispatcher(bot=bot)
 
     @dispatcher.message_handler(commands=['start', ])
@@ -201,6 +252,8 @@ if __name__ == '__main__':
         asyncio.ensure_future(watch_send_posts())
         asyncio.ensure_future(watch_walk_posts())
         asyncio.ensure_future(watch_update_posts())
+        if store_photos_dir:
+            asyncio.ensure_future(watch_store_photos())
 
     async def shutdown():
         logger.info('shutdown callbacks')
