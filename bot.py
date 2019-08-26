@@ -180,7 +180,7 @@ if __name__ == '__main__':
                 logger.info('watch send posts started')
                 await send_posts()
             except Exception as ex:
-                logger.error('watch send posts failed')
+                logger.error(f'watch send posts failed with error {ex!r}')
                 logger.exception(ex)
 
             logger.info(f'watch send posts sleep for {send_posts_timeout}secs')
@@ -196,7 +196,7 @@ if __name__ == '__main__':
                 logger.info('watch update posts started')
                 await walk_wall_posts(api, store, owner_id, max_posts_offset=30)
             except Exception as ex:
-                logger.error('watch update posts failed')
+                logger.error(f'watch update posts failed with error {ex!r}')
                 logger.exception(ex)
 
     async def watch_walk_posts():
@@ -205,7 +205,7 @@ if __name__ == '__main__':
                 logger.info('watch walk posts started')
                 await walk_wall_posts(api, store, owner_id)
             except Exception as ex:
-                logger.error('watch walk posts failed')
+                logger.error(f'watch walk posts failed with error {ex!r}')
                 logger.exception(ex)
 
             logger.info(f'watch walk posts sleep for {walk_posts_timeout}secs')
@@ -218,7 +218,7 @@ if __name__ == '__main__':
                 logger.info('watch store photos')
                 await store_photos()
             except Exception as ex:
-                logger.error('watch store photos failed')
+                logger.error(f'watch store photos failed with error {ex!r}')
                 logger.exception(ex)
 
             logger.info(f'watch store photos for {store_photos_timeout}secs')
