@@ -8,7 +8,7 @@ import json
 import logging
 import os
 
-from store import Store
+from store import PostItem, Store
 from vk import walk_wall_posts
 
 logger = logging.getLogger('bot')
@@ -130,14 +130,15 @@ if __name__ == '__main__':
         logger.info(f'search posts for chat_id={chat_id}')
         item = store.get_wall_post_to_send(chat_id=chat_id, owner_id=owner_id)
         if item:
-            logger.info(f'send posts to chat_id={chat_id} post_id={item["post_id"]}, photos={item["photos"]}')
+            post = PostItem(**item)
+            logger.info(f'send posts to chat_id={chat_id} post_id={post.post_id}, photos={post.photos}')
             media = aiogram.types.MediaGroup()
-            for photo in item['photos']:
+            for photo in post.photos:
                 media.attach_photo(photo['url'])
             await bot.send_media_group(chat_id, media=media)
 
-            store.add_chat_post(chat_id=chat_id, owner_id=owner_id, post_id=item['post_id'])
-            logger.info(f'post sent chat_id={chat_id}, owner_id={owner_id}, post_id={item["owner_id"]}')
+            store.add_chat_post(chat_id=chat_id, owner_id=owner_id, post_id=post.post_id)
+            logger.info(f'post sent chat_id={chat_id}, owner_id={owner_id}, post_id={post.post_id}')
 
     async def send_posts():
         chat_ids = list(store.get_chat_ids())
