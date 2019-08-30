@@ -1,8 +1,8 @@
 -i https://pypi.org/simple
+-e git+https://github.com/alexanderlarin/aiovk.git@0bbe8304c183d9b761cf7fa42eab6f257a34cdce#egg=aiovk
 aiofiles==0.4.0
 aiogram==2.3
 aiohttp==3.5.4
-aiovk==3.0.0
 async-timeout==3.0.1
 attrs==19.1.0
 babel==2.7.0

@@ -165,7 +165,7 @@ if __name__ == '__main__':
                                         f'{owner_id}_{post_id}_{photo_id}{ext}')
                 if not os.path.exists(filename) or not os.path.isfile(filename):
                     logger.debug(f'store photo photo_url={photo_url} to {filename}')
-                    data = await session.driver.get_bin(photo_url, params={})  # TODO: use separate session?
+                    _, data = await session.driver.get_bin(photo_url, params={})  # TODO: use separate session?
                     async with aiofiles.open(filename, mode='wb') as s:
                         await s.write(data)
 
@@ -222,7 +222,7 @@ if __name__ == '__main__':
                 logger.error(f'watch store photos failed with error {ex!r}')
                 logger.exception(ex)
 
-            logger.info(f'watch store photos for {store_photos_timeout}secs')
+            logger.info(f'watch store photos sleeps for {store_photos_timeout}secs')
             await asyncio.sleep(store_photos_timeout)
 
     dispatcher = aiogram.Dispatcher(bot=bot)

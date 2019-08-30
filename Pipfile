@@ -7,11 +7,11 @@ verify_ssl = true
 
 [packages]
 aiohttp = "*"
-aiovk = "*"
 aiogram = "*"
 tinydb = "*"
 backoff = "*"
 aiofiles = "*"
+aiovk = {editable = true,git = "https://github.com/alexanderlarin/aiovk.git"}
 
 [requires]
 python_version = "3.7"
