@@ -256,7 +256,7 @@ if __name__ == '__main__':
         if store_photos_dir:
             asyncio.ensure_future(watch_store_photos())
 
-    async def shutdown():
+    async def shutdown(_):
         logger.info('shutdown callbacks')
         await session.close()
         store.close()
