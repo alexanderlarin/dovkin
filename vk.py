@@ -3,14 +3,9 @@ import aiovk
 import backoff
 import logging
 
-from collections import namedtuple
-
-from store import Store
+from store import PostItem, Store
 
 logger = logging.getLogger(__name__)
-
-
-PostItem = namedtuple('PostItem', ['post_id', 'owner_id', 'date', 'photos'])
 
 
 def get_photo_url(item):

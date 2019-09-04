@@ -1,13 +1,24 @@
+import logging
+
+from collections import namedtuple
 from tinydb import TinyDB, where
 from tinydb.middlewares import CachingMiddleware
 from tinydb.storages import JSONStorage
 
+logger = logging.getLogger(__name__)
+
+PostItem = namedtuple('PostItem', ['post_id', 'owner_id', 'date', 'photos'])
+
 
 class Store:
     def __init__(self, path):
-        self._db = TinyDB(path, storage=CachingMiddleware(JSONStorage))
+        # IMPORTANT: read cache behavior, store.close() is never called on sigterm and ctrl-c
+        caching_middleware = CachingMiddleware(JSONStorage)
+        caching_middleware.WRITE_CACHE_SIZE = 1
+        self._db = TinyDB(path, storage=caching_middleware)
 
     def close(self):
+        logger.info('flush and close')
         self._db.close()
 
     @property
@@ -52,14 +63,17 @@ class Store:
                                         (where('owner_id') == owner_id))
 
     def get_wall_post_ids(self, owner_id):
-        items = self.wall_posts.search(where('owner_id') == owner_id)
+        items = self.get_wall_posts(owner_id=owner_id)
         return (item['post_id'] for item in items)
+
+    def get_wall_posts(self, owner_id):
+        return self.wall_posts.search(where('owner_id') == owner_id)
 
     def get_wall_posts_count(self, owner_id):
         return self.wall_posts.count(where('owner_id') == owner_id)
 
     def get_wall_post_to_send(self, chat_id, owner_id):
-        items = sorted(self.wall_posts.search(where('owner_id') == owner_id),
+        items = sorted(self.get_wall_posts(owner_id=owner_id),
                        key=lambda post: post['date'], reverse=True)
         return next((item for item in items
                      if not self.is_chat_post_exists(chat_id=chat_id,

@@ -1,7 +1,7 @@
 {
     "_meta": {
         "hash": {
-            "sha256": "567c358dff1319728c342d7273377168c1a910ca7ed3314bd80d900fdbd21374"
+            "sha256": "2a07b4f176bc60826fa60001bfe3bd2887cc2aeddbb92990ae0083bcfcd4b310"
         },
         "pipfile-spec": 6,
         "requires": {
@@ -16,6 +16,14 @@
         ]
     },
     "default": {
+        "aiofiles": {
+            "hashes": [
+                "sha256:021ea0ba314a86027c166ecc4b4c07f2d40fc0f4b3a950d1868a0f2571c2bbee",
+                "sha256:1e644c2573f953664368de28d2aa4c89dfd64550429d0c27c4680ccd3aa4985d"
+            ],
+            "index": "pypi",
+            "version": "==0.4.0"
+        },
         "aiogram": {
             "hashes": [
                 "sha256:7d9f761f168f1ad39b6e583cec1f222caa8c5c23d7f0e9da1511fdb0b1e4b0ab",
@@ -53,12 +61,9 @@
             "version": "==3.5.4"
         },
         "aiovk": {
-            "hashes": [
-                "sha256:be567007f6fd8f78452f86ecf1e8d211c15c292b08b7c3b12d44d15a605cc083",
-                "sha256:e157f589f0840542e6fdb2eca04d50849bcca7443c0da447ffb1e55b90d4a4fa"
-            ],
-            "index": "pypi",
-            "version": "==3.0.0"
+            "editable": true,
+            "git": "https://github.com/alexanderlarin/aiovk.git",
+            "ref": "0bbe8304c183d9b761cf7fa42eab6f257a34cdce"
         },
         "async-timeout": {
             "hashes": [
