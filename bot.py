@@ -4,8 +4,10 @@ import aiohttp
 import aiogram
 import aiovk
 import argparse
+import backoff
 import json
 import logging
+import logging.handlers
 import os
 
 from store import PostItem, Store
@@ -38,7 +40,10 @@ if __name__ == '__main__':
     logging.basicConfig(level=logging.DEBUG,
                         format='[%(asctime)s][%(levelname)s][%(name)s] %(message)s',
                         datefmt='%H:%M:%S',
-                        handlers=[logging.StreamHandler(), logging.FileHandler(args.log_file)])
+                        handlers=[logging.StreamHandler(),
+                                  logging.handlers.TimedRotatingFileHandler(args.log_file,
+                                                                            when='h', interval=24,
+                                                                            backupCount=2)])
 
     logger.info(f'init store in {args.store_file}')
     store = Store(args.store_file)
@@ -126,6 +131,8 @@ if __name__ == '__main__':
         return [url for url in (get_photo_url(attach['photo'])
                                 for attach in item.get('attachments', []) if attach['type'] == 'photo') if url]
 
+
+    @backoff.on_exception(backoff.expo, Exception, max_tries=5)
     async def send_chat_posts(chat_id):
         logger.info(f'search posts for chat_id={chat_id}')
         item = store.get_wall_post_to_send(chat_id=chat_id, owner_id=owner_id)
@@ -262,5 +269,5 @@ if __name__ == '__main__':
         store.close()
 
     logger.info('init polling')
-    aiogram.executor.start_polling(dispatcher,
-                                   on_startup=startup, on_shutdown=shutdown)
+    aiogram.executor.start_polling(
+        dispatcher, on_startup=startup, on_shutdown=shutdown)
