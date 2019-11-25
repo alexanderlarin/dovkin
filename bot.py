@@ -93,7 +93,8 @@ if __name__ == '__main__':
     logger.info(f'use vk session user_auth={username}:{password}')
     max_requests_period = get_config_value("vk_max_requests_period", required=True)
     max_requests_per_period = get_config_value("vk_max_requests_per_period", required=True)
-    logger.info(f'use vk api max_requests_period={max_requests_period} max_requests_per_period={max_requests_per_period}')
+    logger.info(
+        f'use vk api max_requests_period={max_requests_period} max_requests_per_period={max_requests_per_period}')
 
     session = ImplicitSession(
         login=username, password=password, app_id=app_id, scope=app_scope,
@@ -122,13 +123,15 @@ if __name__ == '__main__':
     store_photos_timeout = get_config_value('store_photos_timeout', required=store_photos_path)
     logger.info(f'use store_photos_timeout={store_photos_timeout}')
 
+    member_group_ids = None  # TODO: remove global variable
+
     async def send_posts():
         chat_ids = list(store.get_chat_ids())
         logger.info(f'send posts to chat_ids={chat_ids}')
 
         for chat_id in chat_ids:
             try:
-                await send_post(bot, store, chat_id=chat_id)
+                await send_post(bot, store, chat_id=chat_id, group_ids=member_group_ids)
 
             except Exception as ex:
                 logger.error(f'send posts to chat_id={chat_id} failed')
@@ -155,6 +158,7 @@ if __name__ == '__main__':
 
             try:
                 logger.info('watch update posts started')
+                global member_group_ids
                 member_group_ids = await sync_groups_membership(api, group_ids=group_ids)
                 for group_id in member_group_ids:
                     await walk_wall_posts(api, store, owner_id=-group_id, max_offset=30)
@@ -167,6 +171,7 @@ if __name__ == '__main__':
         while True:
             try:
                 logger.info('watch walk posts started')
+                global member_group_ids
                 member_group_ids = await sync_groups_membership(api, group_ids=group_ids)
                 for group_id in member_group_ids:
                     await walk_wall_posts(api, store, owner_id=-group_id)

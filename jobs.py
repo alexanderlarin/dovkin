@@ -5,6 +5,7 @@ import backoff
 import enum
 import logging
 import os
+import random
 
 from store import Store
 from vk import get_photos, ImplicitSession
@@ -123,20 +124,20 @@ async def store_photos(session: ImplicitSession, store: Store, store_photos_path
             break
 
 
-async def send_post(bot: aiogram.Bot, store: Store, chat_id):
-    logger.info(f'search posts for chat_id={chat_id}')
-    item = store.get_wall_post_to_send(chat_id=chat_id)
+async def send_post(bot: aiogram.Bot, store: Store, chat_id, group_ids):
+    owner_id = -group_ids[random.randint(0, len(group_ids) - 1)] if group_ids else None
+    logger.info(f'search post owner_id={owner_id} for chat_id={chat_id}')
+    item = store.get_wall_post_to_send(chat_id=chat_id, owner_id=owner_id)
     if item:
         post_id = item['post_id']
         owner_id = item['owner_id']
         photos = item['photos']
 
-        if photos:
-            logger.info(f'send posts to chat_id={chat_id} post_id={post_id}, photos={photos}')
-            media = aiogram.types.MediaGroup()
-            for photo in photos:
-                media.attach_photo(photo['url'])
-            await bot.send_media_group(chat_id, media=media)
+        logger.info(f'send posts to chat_id={chat_id} post_id={post_id}, photos={photos}')
+        media = aiogram.types.MediaGroup()
+        for photo in photos:
+            media.attach_photo(photo['url'])
+        await bot.send_media_group(chat_id, media=media)
 
-            store.add_chat_post(chat_id=chat_id, owner_id=owner_id, post_id=post_id)
-            logger.info(f'post sent chat_id={chat_id}, owner_id={owner_id}, post_id={post_id}')
+        store.add_chat_post(chat_id=chat_id, owner_id=owner_id, post_id=post_id)
+        logger.info(f'post sent chat_id={chat_id}, owner_id={owner_id}, post_id={post_id}')
