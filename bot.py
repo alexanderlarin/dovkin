@@ -8,7 +8,7 @@ import json
 import logging
 import os
 
-from store import PostItem, Store
+from store import Store
 from jobs import sync_groups_membership, walk_wall_posts
 from vk import ImplicitSession
 
@@ -134,15 +134,17 @@ if __name__ == '__main__':
         logger.info(f'search posts for chat_id={chat_id}')
         item = store.get_wall_post_to_send(chat_id=chat_id)
         if item:
-            post = PostItem(**item)
-            logger.info(f'send posts to chat_id={chat_id} post_id={post.post_id}, photos={post.photos}')
+            post_id = item['post_id']
+            owner_id = item['owner_id']
+            photos = item['photos']
+            logger.info(f'send posts to chat_id={chat_id} post_id={post_id}, photos={photos}')
             media = aiogram.types.MediaGroup()
-            for photo in post.photos:
+            for photo in photos:
                 media.attach_photo(photo['url'])
             await bot.send_media_group(chat_id, media=media)
 
-            store.add_chat_post(chat_id=chat_id, owner_id=post.owner_id, post_id=post.post_id)
-            logger.info(f'post sent chat_id={chat_id}, owner_id={post.owner_id}, post_id={post.post_id}')
+            store.add_chat_post(chat_id=chat_id, owner_id=owner_id, post_id=post_id)
+            logger.info(f'post sent chat_id={chat_id}, owner_id={owner_id}, post_id={post_id}')
 
     async def send_posts():
         chat_ids = list(store.get_chat_ids())
@@ -264,8 +266,8 @@ if __name__ == '__main__':
         asyncio.ensure_future(watch_send_posts())
         asyncio.ensure_future(watch_walk_posts())
         asyncio.ensure_future(watch_update_posts())
-        # if store_photos_dir:
-        #     asyncio.ensure_future(watch_store_photos())
+        if store_photos_dir:
+            asyncio.ensure_future(watch_store_photos())
 
     async def shutdown(_):
         logger.info('shutdown callbacks')

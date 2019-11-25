@@ -7,8 +7,6 @@ from tinydb.storages import JSONStorage
 
 logger = logging.getLogger(__name__)
 
-PostItem = namedtuple('PostItem', ['post_id', 'owner_id', 'date', 'photos'])
-
 
 class Store:
     def __init__(self, path):
