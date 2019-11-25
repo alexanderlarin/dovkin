@@ -1,10 +1,13 @@
+import aiofiles
+import aiogram
 import aiovk
 import backoff
 import enum
 import logging
+import os
 
 from store import Store
-from vk import get_photos
+from vk import get_photos, ImplicitSession
 
 logger = logging.getLogger(__name__)
 
@@ -80,7 +83,8 @@ async def walk_wall_posts(api: aiovk.API, store: Store, owner_id, max_offset=Non
             'date': item['date'],
             'photos': get_photos(item)
         }
-        if not store.is_wall_post_exists(post_id=post_item['post_id'], owner_id=post_item['owner_id']):
+        if post_item['photos'] and not store.is_wall_post_exists(
+                post_id=post_item['post_id'], owner_id=post_item['owner_id']):
             store.add_wall_post(**post_item)
 
         if not max_offset or offset < max_offset:
@@ -90,3 +94,49 @@ async def walk_wall_posts(api: aiovk.API, store: Store, owner_id, max_offset=Non
             logger.info(f'walk wall posts ends due to offset={offset}'
                         f' is greater than max_posts_offset={max_offset}, end')
             break
+
+
+async def store_photos(session: ImplicitSession, store: Store, store_photos_path: str, max_count=10):
+    logger.info(f'store photos max_count={max_count}')
+    wall_posts = store.get_wall_posts()
+    store_count = 0
+    for item in wall_posts:
+        post_id = item['post_id']
+        owner_id = item['owner_id']
+
+        for photo in item['photos']:
+            photo_id = photo['id']
+            photo_url = photo['url']
+
+            _, ext = os.path.splitext(photo_url)
+            filename = os.path.join(store_photos_path, f'{owner_id}_{post_id}_{photo_id}{ext}')
+
+            if not os.path.exists(filename) or not os.path.isfile(filename):
+                logger.debug(f'store photo url={photo_url} to {filename}')
+                _, data = await session.driver.get_bin(photo_url, params={})
+                async with aiofiles.open(filename, mode='wb') as s:
+                    await s.write(data)
+                store_count += 1
+                logger.info(f'store photos count=[{store_count}/{max_count}]')
+
+        if store_count >= max_count:
+            break
+
+
+async def send_post(bot: aiogram.Bot, store: Store, chat_id):
+    logger.info(f'search posts for chat_id={chat_id}')
+    item = store.get_wall_post_to_send(chat_id=chat_id)
+    if item:
+        post_id = item['post_id']
+        owner_id = item['owner_id']
+        photos = item['photos']
+
+        if photos:
+            logger.info(f'send posts to chat_id={chat_id} post_id={post_id}, photos={photos}')
+            media = aiogram.types.MediaGroup()
+            for photo in photos:
+                media.attach_photo(photo['url'])
+            await bot.send_media_group(chat_id, media=media)
+
+            store.add_chat_post(chat_id=chat_id, owner_id=owner_id, post_id=post_id)
+            logger.info(f'post sent chat_id={chat_id}, owner_id={owner_id}, post_id={post_id}')
