@@ -8,6 +8,7 @@ import logging.handlers
 import os
 
 from store.base import BaseStore
+# from store.mongo import MongoDBStore
 from store.tiny import TinyDBStore
 from jobs import send_post, store_photos, sync_groups_membership, walk_wall_posts
 from vk import ImplicitSession
@@ -46,6 +47,7 @@ if __name__ == '__main__':
 
     logger.info(f'init store in {args.store_file}')
     store: BaseStore = TinyDBStore(args.store_file)
+    # store: BaseStore = MongoDBStore("mongodb://localhost:27017/dovkin")
 
     config = {}
     if args.config:
@@ -130,11 +132,9 @@ if __name__ == '__main__':
     member_group_ids = None  # TODO: remove global variable
 
     async def send_posts():
-        chat_ids = list(store.get_chat_ids())
-        logger.info(f'send posts to chat_ids={chat_ids}')
-
-        for chat_id in chat_ids:
+        async for chat_id in store.get_chat_ids():
             try:
+                logger.info(f'send post to chat_id={chat_id}')
                 await send_post(bot, store, chat_id=chat_id, group_ids=member_group_ids)
 
             except Exception as ex:
@@ -211,15 +211,15 @@ if __name__ == '__main__':
 
     @dispatcher.message_handler(commands=['subscribe', ])
     async def subscribe(message: aiogram.types.Message):
-        store.add_chat(message.chat.id)
+        await store.add_chat(chat_id=message.chat.id)
         await bot.send_message(message.chat.id,
                                "Keep Nude and Panties Off!\nYou're subscribed")
-        asyncio.ensure_future(send_post(message.chat.id))
+        asyncio.ensure_future(send_post(bot, store, chat_id=message.chat.id, group_ids=member_group_ids))
         logger.info(f'subscribe chat: {message.chat.id}, send immediately')
 
     @dispatcher.message_handler(commands=['unsubscribe', ])
     async def unsubscribe(message: aiogram.types.Message):
-        store.remove_chat(message.chat.id)
+        await store.remove_chat(chat_id=message.chat.id)
         await bot.send_message(message.chat.id,
                                "Oh no!\nYou're unsubscribed")
         logger.info(f'unsubscribe chat: {message.chat.id}')

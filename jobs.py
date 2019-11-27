@@ -84,13 +84,13 @@ async def walk_wall_posts(api: aiovk.API, store: BaseStore, owner_id, max_offset
             'date': item['date'],
             'photos': get_photos(item)
         }
-        if post_item['photos'] and not store.is_wall_post_exists(
+        if post_item['photos'] and not await store.is_wall_post_exists(
                 post_id=post_item['post_id'], owner_id=post_item['owner_id']):
-            store.add_wall_post(**post_item)
+            await store.add_wall_post(**post_item)
 
         if not max_offset or offset < max_offset:
             logger.info(f'walk store posts owner_id={owner_id}'
-                        f' count=[{store.get_wall_posts_count(owner_id)}/{count}], continue')
+                        f' count=[{await store.get_wall_posts_count(owner_id)}/{count}], continue')
         else:
             logger.info(f'walk wall posts ends due to offset={offset}'
                         f' is greater than max_posts_offset={max_offset}, end')
@@ -99,9 +99,9 @@ async def walk_wall_posts(api: aiovk.API, store: BaseStore, owner_id, max_offset
 
 async def store_photos(session: ImplicitSession, store: BaseStore, store_photos_path: str, max_count=10):
     logger.info(f'store photos max_count={max_count}')
-    wall_posts = store.get_wall_posts()
+
     store_count = 0
-    for item in wall_posts:
+    async for item in store.get_wall_posts():
         post_id = item['post_id']
         owner_id = item['owner_id']
 
@@ -127,7 +127,7 @@ async def store_photos(session: ImplicitSession, store: BaseStore, store_photos_
 async def send_post(bot: aiogram.Bot, store: BaseStore, chat_id, group_ids):
     owner_id = -group_ids[random.randint(0, len(group_ids) - 1)] if group_ids else None
     logger.info(f'search post owner_id={owner_id} for chat_id={chat_id}')
-    item = store.get_wall_post_to_send(chat_id=chat_id, owner_id=owner_id)
+    item = await store.get_wall_post_to_send(chat_id=chat_id, owner_id=owner_id)
     if item:
         post_id = item['post_id']
         owner_id = item['owner_id']
@@ -139,5 +139,5 @@ async def send_post(bot: aiogram.Bot, store: BaseStore, chat_id, group_ids):
             media.attach_photo(photo['url'])
         await bot.send_media_group(chat_id, media=media)
 
-        store.add_chat_post(chat_id=chat_id, owner_id=owner_id, post_id=post_id)
+        await store.add_chat_post(chat_id=chat_id, owner_id=owner_id, post_id=post_id)
         logger.info(f'post sent chat_id={chat_id}, owner_id={owner_id}, post_id={post_id}')
