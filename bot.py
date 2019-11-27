@@ -3,12 +3,12 @@ import aiohttp
 import aiogram
 import aiovk
 import argparse
-import backoff
 import json
 import logging.handlers
 import os
 
-from store import Store
+from store.base import BaseStore
+from store.tiny import TinyDBStore
 from jobs import send_post, store_photos, sync_groups_membership, walk_wall_posts
 from vk import ImplicitSession
 
@@ -45,7 +45,7 @@ if __name__ == '__main__':
                                                                             backupCount=2)])
 
     logger.info(f'init store in {args.store_file}')
-    store = Store(args.store_file)
+    store: BaseStore = TinyDBStore(args.store_file)
 
     config = {}
     if args.config:

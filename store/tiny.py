@@ -1,14 +1,15 @@
 import logging
 
-from collections import namedtuple
 from tinydb import TinyDB, where
 from tinydb.middlewares import CachingMiddleware
 from tinydb.storages import JSONStorage
 
+from .base import BaseStore
+
 logger = logging.getLogger(__name__)
 
 
-class Store:
+class TinyDBStore(BaseStore):
     def __init__(self, path):
         # IMPORTANT: read cache behavior, store.close() is never called on sigterm and ctrl-c
         caching_middleware = CachingMiddleware(JSONStorage)
@@ -42,23 +43,23 @@ class Store:
     def get_chat_ids(self):
         return (item['chat_id'] for item in self.chats.all())
 
+    def is_chat_post_exists(self, chat_id, post_id, owner_id):
+        return self.chat_posts.contains((where('chat_id') == chat_id) &
+                                        (where('post_id') == post_id) &
+                                        (where('owner_id') == owner_id))
+
     def add_chat_post(self, chat_id, post_id, owner_id):
         if not self.is_chat_post_exists(chat_id, post_id, owner_id):
             return self.chat_posts.insert({'chat_id': chat_id, 'post_id': post_id, 'owner_id': owner_id})
 
-    def is_chat_post_exists(self, chat_id, post_id, owner_id):
-        return self.chat_posts.contains((where('chat_id') == chat_id) &
-                                        (where('post_id') == post_id) &
+    def is_wall_post_exists(self, post_id, owner_id):
+        return self.wall_posts.contains((where('post_id') == post_id) &
                                         (where('owner_id') == owner_id))
 
     def add_wall_post(self, post_id, owner_id, date, photos):
         if not self.is_wall_post_exists(post_id, owner_id):
             return self.wall_posts.insert({'post_id': post_id, 'owner_id': owner_id,
                                            'date': date, 'photos': photos})
-
-    def is_wall_post_exists(self, post_id, owner_id):
-        return self.wall_posts.contains((where('post_id') == post_id) &
-                                        (where('owner_id') == owner_id))
 
     def get_wall_post_ids(self, owner_id):
         items = self.get_wall_posts(owner_id=owner_id)

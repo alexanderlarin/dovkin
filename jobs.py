@@ -7,7 +7,7 @@ import logging
 import os
 import random
 
-from store import Store
+from store.base import BaseStore
 from vk import get_photos, ImplicitSession
 
 logger = logging.getLogger(__name__)
@@ -74,7 +74,7 @@ async def generate_wall_posts(api: aiovk.API, owner_id, limit):
             break
 
 
-async def walk_wall_posts(api: aiovk.API, store: Store, owner_id, max_offset=None):
+async def walk_wall_posts(api: aiovk.API, store: BaseStore, owner_id, max_offset=None):
     logger.info(f'walk wall posts owner_id={owner_id} max_offset={max_offset}')
 
     async for item, offset, count in generate_wall_posts(api, owner_id=owner_id, limit=MAX_POSTS_COUNT):
@@ -97,7 +97,7 @@ async def walk_wall_posts(api: aiovk.API, store: Store, owner_id, max_offset=Non
             break
 
 
-async def store_photos(session: ImplicitSession, store: Store, store_photos_path: str, max_count=10):
+async def store_photos(session: ImplicitSession, store: BaseStore, store_photos_path: str, max_count=10):
     logger.info(f'store photos max_count={max_count}')
     wall_posts = store.get_wall_posts()
     store_count = 0
@@ -124,7 +124,7 @@ async def store_photos(session: ImplicitSession, store: Store, store_photos_path
             break
 
 
-async def send_post(bot: aiogram.Bot, store: Store, chat_id, group_ids):
+async def send_post(bot: aiogram.Bot, store: BaseStore, chat_id, group_ids):
     owner_id = -group_ids[random.randint(0, len(group_ids) - 1)] if group_ids else None
     logger.info(f'search post owner_id={owner_id} for chat_id={chat_id}')
     item = store.get_wall_post_to_send(chat_id=chat_id, owner_id=owner_id)
