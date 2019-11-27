@@ -1,17 +1,16 @@
 import asyncio
-import aiofiles
 import aiohttp
 import aiogram
 import aiovk
 import argparse
 import backoff
 import json
-import logging
 import logging.handlers
 import os
 
-from store import PostItem, Store
-from vk import walk_wall_posts
+from store import Store
+from jobs import send_post, store_photos, sync_groups_membership, walk_wall_posts
+from vk import ImplicitSession
 
 logger = logging.getLogger('bot')
 
@@ -96,24 +95,28 @@ if __name__ == '__main__':
     user_auth = get_config_value('vk_user_auth', required=True)
     username, password = get_username_password(user_auth)
     logger.info(f'use vk session user_auth={username}:{password}')
+    max_requests_period = get_config_value("vk_max_requests_period", required=True)
+    max_requests_per_period = get_config_value("vk_max_requests_per_period", required=True)
+    logger.info(
+        f'use vk api max_requests_period={max_requests_period} max_requests_per_period={max_requests_per_period}')
 
-    session = aiovk.ImplicitSession(login=username, password=password,
-                                    app_id=app_id, scope=app_scope)
+    session = ImplicitSession(
+        login=username, password=password, app_id=app_id, scope=app_scope,
+        max_requests_period=max_requests_period, max_requests_per_period=max_requests_per_period)
 
     api = aiovk.API(session=session)
 
-    group_id = get_config_value('vk_group_id', required=True)
-    owner_id = -group_id  # Because it's a group id
-    logger.info(f'use vk owner_id={owner_id}')
+    group_ids = get_config_value('vk_group_ids', required=True)
+    logger.info(f'use vk group_ids={group_ids}')
 
-    store_photos_dir = get_config_value('store_photos_dir')
-    if store_photos_dir:
-        logger.info(f'use store_photos_dir={store_photos_dir}')
-        if not os.path.exists(store_photos_dir) or not os.path.isdir(store_photos_dir):
-            logger.warning(f'create store_photos_dir={store_photos_dir}')
-            os.makedirs(store_photos_dir)
+    store_photos_path = get_config_value('store_photos_path')
+    if store_photos_path:
+        logger.info(f'use store_photos_path={store_photos_path}')
+        if not os.path.exists(store_photos_path) or not os.path.isdir(store_photos_path):
+            logger.warning(f'create store_photos_path={store_photos_path}')
+            os.makedirs(store_photos_path)
     else:
-        logger.warning(f'store_photos_dir is empty, no photos will be stored')
+        logger.warning(f'store_photos_path is empty, no photos will be stored')
 
     send_posts_timeout = get_config_value('send_posts_timeout', required=True)
     logger.info(f'use send_posts_timeout={send_posts_timeout}')
@@ -121,31 +124,10 @@ if __name__ == '__main__':
     logger.info(f'use walk_posts_timeout={walk_posts_timeout}')
     update_posts_timeout = get_config_value('update_posts_timeout', required=True)
     logger.info(f'use update_posts_timeout={update_posts_timeout}')
-    store_photos_timeout = get_config_value('store_photos_timeout', required=store_photos_dir)
+    store_photos_timeout = get_config_value('store_photos_timeout', required=store_photos_path)
     logger.info(f'use store_photos_timeout={store_photos_timeout}')
 
-    def get_photo_url(item):
-        return item.get('photo_2560', item.get('photo_1280', item.get('photo_807', None)))
-
-    def get_photo_urls(item):
-        return [url for url in (get_photo_url(attach['photo'])
-                                for attach in item.get('attachments', []) if attach['type'] == 'photo') if url]
-
-
-    @backoff.on_exception(backoff.expo, Exception, max_tries=5)
-    async def send_chat_posts(chat_id):
-        logger.info(f'search posts for chat_id={chat_id}')
-        item = store.get_wall_post_to_send(chat_id=chat_id, owner_id=owner_id)
-        if item:
-            post = PostItem(**item)
-            logger.info(f'send posts to chat_id={chat_id} post_id={post.post_id}, photos={post.photos}')
-            media = aiogram.types.MediaGroup()
-            for photo in post.photos:
-                media.attach_photo(photo['url'])
-            await bot.send_media_group(chat_id, media=media)
-
-            store.add_chat_post(chat_id=chat_id, owner_id=owner_id, post_id=post.post_id)
-            logger.info(f'post sent chat_id={chat_id}, owner_id={owner_id}, post_id={post.post_id}')
+    member_group_ids = None  # TODO: remove global variable
 
     async def send_posts():
         chat_ids = list(store.get_chat_ids())
@@ -153,40 +135,18 @@ if __name__ == '__main__':
 
         for chat_id in chat_ids:
             try:
-                await send_chat_posts(chat_id)
+                await send_post(bot, store, chat_id=chat_id, group_ids=member_group_ids)
+
             except Exception as ex:
                 logger.error(f'send posts to chat_id={chat_id} failed')
                 logger.exception(ex)
-
-    async def store_photos(max_store_photos=10):
-        logger.info(f'store photos for owner_id={owner_id}')
-        wall_posts = store.get_wall_posts(owner_id=owner_id)
-        store_photos_count = 0
-        for item in wall_posts:
-            for photo in item['photos']:
-                photo_url = photo['url']
-                _, ext = os.path.splitext(photo_url)
-                post_id = item['post_id']
-                photo_id = photo['id']
-                filename = os.path.join(store_photos_dir,
-                                        f'{owner_id}_{post_id}_{photo_id}{ext}')
-                if not os.path.exists(filename) or not os.path.isfile(filename):
-                    logger.debug(f'store photo photo_url={photo_url} to {filename}')
-                    _, data = await session.driver.get_bin(photo_url, params={})  # TODO: use separate session?
-                    async with aiofiles.open(filename, mode='wb') as s:
-                        await s.write(data)
-
-                    store_photos_count += 1
-                    logger.info(f'store photos count={store_photos_count} of {max_store_photos}')
-
-            if store_photos_count >= max_store_photos:
-                break
 
     async def watch_send_posts():
         while True:
             try:
                 logger.info('watch send posts started')
                 await send_posts()
+
             except Exception as ex:
                 logger.error(f'watch send posts failed with error {ex!r}')
                 logger.exception(ex)
@@ -196,13 +156,17 @@ if __name__ == '__main__':
 
     async def watch_update_posts():
         while True:
-            # Sleep before dut to watch posts may be in progress
+            # Sleep before due to watch posts may be in progress
             logger.info(f'watch update posts sleep for {update_posts_timeout}secs')
             await asyncio.sleep(update_posts_timeout)
 
             try:
                 logger.info('watch update posts started')
-                await walk_wall_posts(api, store, owner_id, max_posts_offset=30)
+                global member_group_ids
+                member_group_ids = await sync_groups_membership(api, group_ids=group_ids)
+                for group_id in member_group_ids:
+                    await walk_wall_posts(api, store, owner_id=-group_id, max_offset=30)
+
             except Exception as ex:
                 logger.error(f'watch update posts failed with error {ex!r}')
                 logger.exception(ex)
@@ -211,7 +175,11 @@ if __name__ == '__main__':
         while True:
             try:
                 logger.info('watch walk posts started')
-                await walk_wall_posts(api, store, owner_id)
+                global member_group_ids
+                member_group_ids = await sync_groups_membership(api, group_ids=group_ids)
+                for group_id in member_group_ids:
+                    await walk_wall_posts(api, store, owner_id=-group_id)
+
             except Exception as ex:
                 logger.error(f'watch walk posts failed with error {ex!r}')
                 logger.exception(ex)
@@ -219,12 +187,13 @@ if __name__ == '__main__':
             logger.info(f'watch walk posts sleep for {walk_posts_timeout}secs')
             await asyncio.sleep(walk_posts_timeout)
 
-
     async def watch_store_photos():
         while True:
             try:
-                logger.info('watch store photos')
-                await store_photos()
+                logger.info('watch store photos started')
+                await store_photos(session, store,
+                                   store_photos_path=store_photos_path)
+
             except Exception as ex:
                 logger.error(f'watch store photos failed with error {ex!r}')
                 logger.exception(ex)
@@ -245,7 +214,7 @@ if __name__ == '__main__':
         store.add_chat(message.chat.id)
         await bot.send_message(message.chat.id,
                                "Keep Nude and Panties Off!\nYou're subscribed")
-        asyncio.ensure_future(send_chat_posts(message.chat.id))
+        asyncio.ensure_future(send_post(message.chat.id))
         logger.info(f'subscribe chat: {message.chat.id}, send immediately')
 
     @dispatcher.message_handler(commands=['unsubscribe', ])
@@ -260,7 +229,7 @@ if __name__ == '__main__':
         asyncio.ensure_future(watch_send_posts())
         asyncio.ensure_future(watch_walk_posts())
         asyncio.ensure_future(watch_update_posts())
-        if store_photos_dir:
+        if store_photos_path:
             asyncio.ensure_future(watch_store_photos())
 
     async def shutdown(_):

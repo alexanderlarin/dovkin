@@ -7,8 +7,6 @@ from tinydb.storages import JSONStorage
 
 logger = logging.getLogger(__name__)
 
-PostItem = namedtuple('PostItem', ['post_id', 'owner_id', 'date', 'photos'])
-
 
 class Store:
     def __init__(self, path):
@@ -66,8 +64,8 @@ class Store:
         items = self.get_wall_posts(owner_id=owner_id)
         return (item['post_id'] for item in items)
 
-    def get_wall_posts(self, owner_id):
-        return self.wall_posts.search(where('owner_id') == owner_id)
+    def get_wall_posts(self, owner_id=None):
+        return self.wall_posts.search(where('owner_id') == owner_id) if owner_id else self.wall_posts.all()
 
     def get_wall_posts_count(self, owner_id):
         return self.wall_posts.count(where('owner_id') == owner_id)
@@ -75,6 +73,9 @@ class Store:
     def get_wall_post_to_send(self, chat_id, owner_id):
         items = sorted(self.get_wall_posts(owner_id=owner_id),
                        key=lambda post: post['date'], reverse=True)
-        return next((item for item in items
-                     if not self.is_chat_post_exists(chat_id=chat_id,
-                                                     post_id=item['post_id'], owner_id=owner_id)), None)
+        return next((
+            item for item in items
+            if item['photos'] and not self.is_chat_post_exists(chat_id=chat_id,
+                                                               post_id=item['post_id'],
+                                                               owner_id=item['owner_id'])
+        ))
