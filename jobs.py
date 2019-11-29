@@ -77,16 +77,11 @@ async def generate_wall_posts(api: aiovk.API, owner_id, limit):
 async def walk_wall_posts(api: aiovk.API, store: BaseStore, owner_id, max_offset=None):
     logger.info(f'walk wall posts owner_id={owner_id} max_offset={max_offset}')
 
-    async for item, offset, count in generate_wall_posts(api, owner_id=owner_id, limit=MAX_POSTS_COUNT):
-        post_item = {
-            'post_id': item['id'],
-            'owner_id': item['owner_id'],
-            'date': item['date'],
-            'photos': get_photos(item)
-        }
-        if post_item['photos'] and not await store.is_wall_post_exists(
-                post_id=post_item['post_id'], owner_id=post_item['owner_id']):
-            await store.add_wall_post(**post_item)
+    async for fields, offset, count in generate_wall_posts(api, owner_id=owner_id, limit=MAX_POSTS_COUNT):
+        post_id = fields.pop('id')
+        owner_id = fields.pop('owner_id')
+        if not await store.is_wall_post_exists(post_id=post_id, owner_id=owner_id):
+            await store.add_wall_post(post_id=post_id, owner_id=owner_id, **fields)
 
         if not max_offset or offset < max_offset:
             logger.info(f'walk store posts owner_id={owner_id}'
@@ -101,11 +96,11 @@ async def store_photos(session: ImplicitSession, store: BaseStore, store_photos_
     logger.info(f'store photos max_count={max_count}')
 
     store_count = 0
-    async for item in store.get_wall_posts():
-        post_id = item['post_id']
-        owner_id = item['owner_id']
+    async for wall_post in store.get_wall_posts():
+        post_id = wall_post['post_id']
+        owner_id = wall_post['owner_id']
 
-        for photo in item['photos']:
+        for photo in get_photos(wall_post):
             photo_id = photo['id']
             photo_url = photo['url']
 
@@ -127,17 +122,21 @@ async def store_photos(session: ImplicitSession, store: BaseStore, store_photos_
 async def send_post(bot: aiogram.Bot, store: BaseStore, chat_id, group_ids):
     owner_id = -group_ids[random.randint(0, len(group_ids) - 1)] if group_ids else None
     logger.info(f'search post owner_id={owner_id} for chat_id={chat_id}')
-    item = await store.get_wall_post_to_send(chat_id=chat_id, owner_id=owner_id)
-    if item:
-        post_id = item['post_id']
-        owner_id = item['owner_id']
-        photos = item['photos']
+    async for wall_post in store.get_wall_posts(owner_id=owner_id):
+        post_id = wall_post['post_id']
+        owner_id = wall_post['owner_id']  # Important: cause in this step we should have real owner_id not None
+        if not await store.is_chat_wall_post_exists(chat_id=chat_id, post_id=post_id, owner_id=owner_id):
+            photos = get_photos(wall_post)
+            if photos:
+                logger.info(f'send posts to chat_id={chat_id} post_id={post_id}, photos={photos}')
+                media = aiogram.types.MediaGroup()
+                for photo in photos:
+                    media.attach_photo(photo['url'])
+                await bot.send_media_group(chat_id, media=media)
+                await store.add_chat_wall_post(owner_id=owner_id, post_id=post_id, chat_id=chat_id)
+                logger.info(f'post owner_id={owner_id} post_id={post_id} sent chat_id={chat_id}')
 
-        logger.info(f'send posts to chat_id={chat_id} post_id={post_id}, photos={photos}')
-        media = aiogram.types.MediaGroup()
-        for photo in photos:
-            media.attach_photo(photo['url'])
-        await bot.send_media_group(chat_id, media=media)
+                return wall_post  # TODO: i'm not happy with this style :(
+    logger.warning(f'can\'t find post to send chat_id={chat_id}')
 
-        await store.add_chat_post(chat_id=chat_id, owner_id=owner_id, post_id=post_id)
-        logger.info(f'post sent chat_id={chat_id}, owner_id={owner_id}, post_id={post_id}')
+

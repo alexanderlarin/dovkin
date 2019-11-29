@@ -132,7 +132,8 @@ if __name__ == '__main__':
     member_group_ids = None  # TODO: remove global variable
 
     async def send_posts():
-        async for chat_id in store.get_chat_ids():
+        async for chat in store.get_chats():
+            chat_id = chat['chat_id']
             try:
                 logger.info(f'send post to chat_id={chat_id}')
                 await send_post(bot, store, chat_id=chat_id, group_ids=member_group_ids)

@@ -11,9 +11,9 @@ class MongoDBStore(BaseStore):
     def __init__(self, connection_uri):
         self._db = motor_asyncio.AsyncIOMotorClient(connection_uri).get_database()
 
-    async def get_chat_ids(self):
+    async def get_chats(self):
         async for doc in self._db.chats.find():
-            yield doc['chat_id']
+            yield doc
 
     async def add_chat(self, chat_id):
         doc = {'chat_id': chat_id}
@@ -24,7 +24,8 @@ class MongoDBStore(BaseStore):
         return self._db.chats.find_one_and_delete({'chat_id': chat_id})
 
     async def get_wall_posts(self, owner_id=None):
-        async for doc in self._db.wall_posts.find({'owner_id': owner_id} if owner_id else None):
+        query = {'owner_id': owner_id} if owner_id else None
+        async for doc in self._db.wall_posts.find(query).sort('date', -1):  # TODO: it's not obvious
             yield doc
 
     async def get_wall_posts_count(self, owner_id):
@@ -33,20 +34,16 @@ class MongoDBStore(BaseStore):
     async def is_wall_post_exists(self, post_id, owner_id):
         return await self._db.wall_posts.find_one({'post_id': post_id, 'owner_id': owner_id}) is not None
 
-    async def add_wall_post(self, post_id, owner_id, date, photos):
+    async def add_wall_post(self, post_id, owner_id, **fields):
         return await self._db.wall_posts.find_one_and_update(
-            {'post_id': post_id, 'owner_id': owner_id}, {'$set': {'date': date, 'photos': photos}}, upsert=True)
+            {'post_id': post_id, 'owner_id': owner_id}, {'$set': fields}, upsert=True)
 
-    async def add_chat_post(self, chat_id, post_id, owner_id):
+    async def add_chat_wall_post(self, post_id, owner_id, chat_id):
         doc = {'chat_id': chat_id, 'post_id': post_id, 'owner_id': owner_id}
-        if not await self._db.chat_posts.find_one(doc):
-            return await self._db.chat_posts.insert_one(doc)
+        if not await self._db.chat_wall_posts.find_one(doc):
+            return await self._db.chat_wall_posts.insert_one(doc)
 
-    async def get_wall_post_to_send(self, chat_id, owner_id):
-        find_filter = {'owner_id': owner_id} if owner_id else {}
-        find_filter['photos'] = {'$ne': None}
-        async for post in self._db.wall_posts.find(find_filter).sort('date', -1):
-            if not await self._db.chat_posts.find_one({
-                'chat_id': chat_id, 'post_id': post['post_id'], 'owner_id': post['owner_id']
-            }):
-                return post
+    async def is_chat_wall_post_exists(self, chat_id, post_id, owner_id):
+        return await self._db.chat_wall_posts.find_one({
+            'chat_id': chat_id, 'post_id': post_id, 'owner_id': owner_id
+        })

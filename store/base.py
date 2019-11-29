@@ -6,7 +6,7 @@ class BaseStore(ABC):
         pass
 
     @abstractmethod
-    async def get_chat_ids(self):
+    async def get_chats(self):
         yield
 
     @abstractmethod
@@ -30,13 +30,13 @@ class BaseStore(ABC):
         pass
 
     @abstractmethod
-    async def add_wall_post(self, post_id, owner_id, date, photos):  # TODO: add fields and rename to update
+    async def add_wall_post(self, post_id, owner_id, **fields):
         pass
 
     @abstractmethod
-    async def add_chat_post(self, chat_id, post_id, owner_id):
+    async def add_chat_wall_post(self, chat_id, post_id, owner_id):
         pass
 
     @abstractmethod
-    async def get_wall_post_to_send(self, chat_id, owner_id):
+    async def is_chat_wall_post_exists(self, chat_id, post_id, owner_id):
         pass
