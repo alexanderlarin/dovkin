@@ -7,9 +7,7 @@ import json
 import logging.handlers
 import os
 
-from store.base import BaseStore
-# from store.mongo import MongoDBStore
-from store.tiny import TinyDBStore
+from store import BaseStore, create_store
 from jobs import send_post, store_photos, sync_groups_membership, walk_wall_posts
 from vk import ImplicitSession
 
@@ -31,12 +29,13 @@ if __name__ == '__main__':
     parser.add_argument('--telegram-bot-token', help='telegram bot token given by BotFather bot')
     parser.add_argument('--proxy-url', help='proxy server url')
     parser.add_argument('--proxy-auth', help='proxy server credentials in <login:password> format')
-    parser.add_argument('--store-file', default='db.tinydb', help='path to JSON-formatted local store file')
+    parser.add_argument('--store', default='tinydb://db.tinydb', help='path to JSON-formatted local store file')
     parser.add_argument('--store-photos-dir', help='path to downloaded photos store')
     parser.add_argument('--log-file', default='bot.log', help='log file path')
 
     args = parser.parse_args()
 
+    # TODO: move logging config to JSON
     logging.basicConfig(level=logging.DEBUG,
                         format='[%(asctime)s][%(levelname)s][%(name)s] %(message)s',
                         datefmt='%H:%M:%S',
@@ -45,8 +44,8 @@ if __name__ == '__main__':
                                                                             when='h', interval=24,
                                                                             backupCount=2)])
 
-    logger.info(f'init store in {args.store_file}')
-    store: BaseStore = TinyDBStore(args.store_file)
+    logger.info(f'init store connection_uri={args.store}')
+    store: BaseStore = create_store(args.store)
     # store: BaseStore = MongoDBStore("mongodb://localhost:27017/dovkin")
 
     config = {}
