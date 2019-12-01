@@ -10,11 +10,15 @@ class BaseStore(ABC):
         yield
 
     @abstractmethod
-    async def add_chat(self, chat_id):
+    async def add_chat(self, chat_id, **fields):
         pass
 
     @abstractmethod
     async def remove_chat(self, chat_id):
+        pass
+
+    @abstractmethod
+    async def add_subscription(self, chat_id, group_id):
         pass
 
     @abstractmethod

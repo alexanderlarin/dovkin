@@ -25,6 +25,10 @@ class TinyDBStore(BaseStore):
         return self._db.table('chats')
 
     @property
+    def subscriptions(self):
+        return self._db.table('subscriptions')
+
+    @property
     def chat_wall_posts(self):
         return self._db.table('chat_wall_posts')
 
@@ -32,17 +36,21 @@ class TinyDBStore(BaseStore):
     def wall_posts(self):
         return self._db.table('wall_posts')
 
-    async def add_chat(self, chat_id):
+    async def get_chats(self):
+        for item in self.chats.all():
+            yield item
+
+    async def add_chat(self, chat_id, **fields):
         if not self.chats.contains(where('chat_id') == chat_id):
-            return self.chats.insert({'chat_id': chat_id})
+            return self.chats.insert({'chat_id': chat_id, **fields})
 
     async def remove_chat(self, chat_id):
         if not self.chats.contains(where('chat_id') == chat_id):
             return self.chats.remove(where('chat_id') == chat_id)
 
-    async def get_chats(self):
-        for item in self.chats.all():
-            yield item
+    async def add_subscription(self, chat_id, group_id):
+        if not self.subscriptions.contains((where('chat_id') == chat_id) & (where('group_id') == group_id)):
+            return self.subscriptions.insert({'chat_id': chat_id, 'group_id': group_id})
 
     async def is_wall_post_exists(self, post_id, owner_id):
         return self.wall_posts.contains((where('post_id') == post_id) &

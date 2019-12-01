@@ -7,6 +7,7 @@ import json
 import logging.handlers
 import os
 
+from aiogram.contrib.fsm_storage.memory import MemoryStorage
 from handlers import apply_handlers
 from jobs import send_post, store_photos, sync_groups_membership, walk_wall_posts
 from store import BaseStore, create_store
@@ -204,15 +205,15 @@ if __name__ == '__main__':
 
     logger.info(f'init dispatcher with message handlers')
     dispatcher = apply_handlers(
-        dispatcher=aiogram.Dispatcher(bot=bot), store=store)
+        dispatcher=aiogram.Dispatcher(bot=bot, storage=MemoryStorage()), store=store, api=api)
 
     async def startup(_):
         logger.info('startup callbacks')
-        asyncio.ensure_future(watch_send_posts())
-        asyncio.ensure_future(watch_walk_posts())
-        asyncio.ensure_future(watch_update_posts())
-        if store_photos_path:
-            asyncio.ensure_future(watch_store_photos())
+        # asyncio.ensure_future(watch_send_posts())
+        # asyncio.ensure_future(watch_walk_posts())
+        # asyncio.ensure_future(watch_update_posts())
+        # if store_photos_path:
+        #     asyncio.ensure_future(watch_store_photos())
 
     async def shutdown(_):
         logger.info('shutdown callbacks')
