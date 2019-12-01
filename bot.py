@@ -7,8 +7,9 @@ import json
 import logging.handlers
 import os
 
-from store import BaseStore, create_store
+from handlers import apply_handlers
 from jobs import send_post, store_photos, sync_groups_membership, walk_wall_posts
+from store import BaseStore, create_store
 from vk import ImplicitSession
 
 logger = logging.getLogger('bot')
@@ -201,28 +202,9 @@ if __name__ == '__main__':
             logger.info(f'watch store photos sleeps for {store_photos_timeout}secs')
             await asyncio.sleep(store_photos_timeout)
 
-    dispatcher = aiogram.Dispatcher(bot=bot)
-
-    @dispatcher.message_handler(commands=['start', ])
-    async def start(message: aiogram.types.Message):
-        await bot.send_message(message.chat.id,
-                               "Hi!\nI'm DoVkIn!\nPowered by @alexanderolarin\nJust type /subscribe command")
-
-
-    @dispatcher.message_handler(commands=['subscribe', ])
-    async def subscribe(message: aiogram.types.Message):
-        await store.add_chat(chat_id=message.chat.id)
-        await bot.send_message(message.chat.id,
-                               "Keep Nude and Panties Off!\nYou're subscribed")
-        asyncio.ensure_future(send_post(bot, store, chat_id=message.chat.id, group_ids=member_group_ids))
-        logger.info(f'subscribe chat: {message.chat.id}, send immediately')
-
-    @dispatcher.message_handler(commands=['unsubscribe', ])
-    async def unsubscribe(message: aiogram.types.Message):
-        await store.remove_chat(chat_id=message.chat.id)
-        await bot.send_message(message.chat.id,
-                               "Oh no!\nYou're unsubscribed")
-        logger.info(f'unsubscribe chat: {message.chat.id}')
+    logger.info(f'init dispatcher with message handlers')
+    dispatcher = apply_handlers(
+        dispatcher=aiogram.Dispatcher(bot=bot), store=store)
 
     async def startup(_):
         logger.info('startup callbacks')
