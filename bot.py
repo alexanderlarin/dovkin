@@ -3,12 +3,11 @@ import aiohttp
 import aiogram
 import aiovk
 import argparse
-import backoff
 import json
 import logging.handlers
 import os
 
-from store import Store
+from store import BaseStore, create_store
 from jobs import send_post, store_photos, sync_groups_membership, walk_wall_posts
 from vk import ImplicitSession
 
@@ -30,12 +29,13 @@ if __name__ == '__main__':
     parser.add_argument('--telegram-bot-token', help='telegram bot token given by BotFather bot')
     parser.add_argument('--proxy-url', help='proxy server url')
     parser.add_argument('--proxy-auth', help='proxy server credentials in <login:password> format')
-    parser.add_argument('--store-file', default='db.tinydb', help='path to JSON-formatted local store file')
+    parser.add_argument('--store', default='tinydb://db.tinydb', help='path to JSON-formatted local store file')
     parser.add_argument('--store-photos-dir', help='path to downloaded photos store')
     parser.add_argument('--log-file', default='bot.log', help='log file path')
 
     args = parser.parse_args()
 
+    # TODO: move logging config to JSON
     logging.basicConfig(level=logging.DEBUG,
                         format='[%(asctime)s][%(levelname)s][%(name)s] %(message)s',
                         datefmt='%H:%M:%S',
@@ -44,8 +44,9 @@ if __name__ == '__main__':
                                                                             when='h', interval=24,
                                                                             backupCount=2)])
 
-    logger.info(f'init store in {args.store_file}')
-    store = Store(args.store_file)
+    logger.info(f'init store connection_uri={args.store}')
+    store: BaseStore = create_store(args.store)
+    # store: BaseStore = MongoDBStore("mongodb://localhost:27017/dovkin")
 
     config = {}
     if args.config:
@@ -130,11 +131,10 @@ if __name__ == '__main__':
     member_group_ids = None  # TODO: remove global variable
 
     async def send_posts():
-        chat_ids = list(store.get_chat_ids())
-        logger.info(f'send posts to chat_ids={chat_ids}')
-
-        for chat_id in chat_ids:
+        async for chat in store.get_chats():
+            chat_id = chat['chat_id']
             try:
+                logger.info(f'send post to chat_id={chat_id}')
                 await send_post(bot, store, chat_id=chat_id, group_ids=member_group_ids)
 
             except Exception as ex:
@@ -211,15 +211,15 @@ if __name__ == '__main__':
 
     @dispatcher.message_handler(commands=['subscribe', ])
     async def subscribe(message: aiogram.types.Message):
-        store.add_chat(message.chat.id)
+        await store.add_chat(chat_id=message.chat.id)
         await bot.send_message(message.chat.id,
                                "Keep Nude and Panties Off!\nYou're subscribed")
-        asyncio.ensure_future(send_post(message.chat.id))
+        asyncio.ensure_future(send_post(bot, store, chat_id=message.chat.id, group_ids=member_group_ids))
         logger.info(f'subscribe chat: {message.chat.id}, send immediately')
 
     @dispatcher.message_handler(commands=['unsubscribe', ])
     async def unsubscribe(message: aiogram.types.Message):
-        store.remove_chat(message.chat.id)
+        await store.remove_chat(chat_id=message.chat.id)
         await bot.send_message(message.chat.id,
                                "Oh no!\nYou're unsubscribed")
         logger.info(f'unsubscribe chat: {message.chat.id}')
