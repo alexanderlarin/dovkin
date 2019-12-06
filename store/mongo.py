@@ -15,11 +15,21 @@ class MongoDBStore(BaseStore):
         async for doc in self._db.chats.find():
             yield doc
 
-    async def add_chat(self, chat_id, **fields):
+    async def upsert_chat(self, chat_id, **fields):
         return await self._db.chats.find_one_and_update({'chat_id': chat_id}, {'$set': fields}, upsert=True)
 
-    async def remove_chat(self, chat_id):
-        return self._db.chats.find_one_and_delete({'chat_id': chat_id})
+    async def get_groups(self, is_member=None):
+        query = {'is_member': is_member} if is_member is not None else None
+        async for doc in self._db.groups.find(query):
+            yield doc
+
+    async def upsert_group(self, group_id, **fields):
+        return await self._db.groups.find_one_and_update({'group_id': group_id}, {'$set': fields}, upsert=True)
+
+    async def get_subscriptions(self, chat_id=None):
+        query = {'chat_id': chat_id} if chat_id is not None else None
+        async for doc in self._db.subscriptions.find(query):
+            yield doc
 
     async def add_subscription(self, chat_id, group_id):
         doc = {'chat_id': chat_id, 'group_id': group_id}

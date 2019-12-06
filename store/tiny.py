@@ -1,4 +1,5 @@
 import logging
+from functools import reduce
 
 from tinydb import TinyDB, where
 from tinydb.middlewares import CachingMiddleware
@@ -25,6 +26,10 @@ class TinyDBStore(BaseStore):
         return self._db.table('chats')
 
     @property
+    def groups(self):
+        return self._db.table('groups')
+
+    @property
     def subscriptions(self):
         return self._db.table('subscriptions')
 
@@ -36,17 +41,42 @@ class TinyDBStore(BaseStore):
     def wall_posts(self):
         return self._db.table('wall_posts')
 
+    @staticmethod
+    def get_filters(**filters):
+        if filters:
+            filters = {key: value for key, value in filters.items() if value is not None}
+
+            def concat(q, key):
+                cond = where(key) == filters[key]
+                return (q & cond) if q else cond
+
+            return reduce(concat, filters.keys(), None)
+
+    def get_items(self, table_name, **filters):
+        table = self._db.table(table_name)
+        query = self.get_filters(**filters)
+        if not query:
+            return table.all()
+        else:
+            return table.search(query)
+
     async def get_chats(self):
         for item in self.chats.all():
             yield item
 
-    async def add_chat(self, chat_id, **fields):
-        if not self.chats.contains(where('chat_id') == chat_id):
-            return self.chats.insert({'chat_id': chat_id, **fields})
+    async def upsert_chat(self, chat_id, **fields):
+        return self.groups.upsert({'chat_id': chat_id, **fields}, where('chart_id') == chat_id)
 
-    async def remove_chat(self, chat_id):
-        if not self.chats.contains(where('chat_id') == chat_id):
-            return self.chats.remove(where('chat_id') == chat_id)
+    async def get_groups(self, is_member=None):
+        for item in self.get_items('groups', is_member=is_member):
+            yield item
+
+    async def upsert_group(self, group_id, **fields):
+        return self.groups.upsert({'group_id': group_id, **fields}, where('group_id') == group_id)
+
+    async def get_subscriptions(self, chat_id=None):
+        for item in self.get_items('subscriptions', chat_id=chat_id):
+            yield item
 
     async def add_subscription(self, chat_id, group_id):
         if not self.subscriptions.contains((where('chat_id') == chat_id) & (where('group_id') == group_id)):

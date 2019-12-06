@@ -9,7 +9,7 @@ import os
 
 from aiogram.contrib.fsm_storage.memory import MemoryStorage
 from handlers import apply_handlers
-from jobs import send_post, store_photos, sync_groups_membership, walk_wall_posts
+from jobs import send_post, store_photos, sync_group_membership, walk_wall_posts
 from store import BaseStore, create_store
 from vk import ImplicitSession
 
@@ -23,7 +23,6 @@ if __name__ == '__main__':
     parser.add_argument('--vk-app-id', help='vk.com registered app ID')
     parser.add_argument('--vk-app-scope', help='vk.com registered app SCOPE in "SCOPE_1, SCOPE_2...SCOPE_N" format')
     parser.add_argument('--vk-user-auth', help='vk.com user credentials in "login:password" format')
-    parser.add_argument('--vk-group-id')
     parser.add_argument('--send-posts-timeout')
     parser.add_argument('--walk-posts-timeout')
     parser.add_argument('--update-posts-timeout')
@@ -109,9 +108,6 @@ if __name__ == '__main__':
 
     api = aiovk.API(session=session)
 
-    group_ids = get_config_value('vk_group_ids', required=True)
-    logger.info(f'use vk group_ids={group_ids}')
-
     store_photos_path = get_config_value('store_photos_path')
     if store_photos_path:
         logger.info(f'use store_photos_path={store_photos_path}')
@@ -130,14 +126,12 @@ if __name__ == '__main__':
     store_photos_timeout = get_config_value('store_photos_timeout', required=store_photos_path)
     logger.info(f'use store_photos_timeout={store_photos_timeout}')
 
-    member_group_ids = None  # TODO: remove global variable
-
     async def send_posts():
         async for chat in store.get_chats():
             chat_id = chat['chat_id']
             try:
                 logger.info(f'send post to chat_id={chat_id}')
-                await send_post(bot, store, chat_id=chat_id, group_ids=member_group_ids)
+                await send_post(bot, store, chat_id=chat_id)
 
             except Exception as ex:
                 logger.error(f'send posts to chat_id={chat_id} failed')
@@ -146,62 +140,78 @@ if __name__ == '__main__':
     async def watch_send_posts():
         while True:
             try:
-                logger.info('watch send posts started')
+                logger.info('start send_posts routine')
                 await send_posts()
 
             except Exception as ex:
-                logger.error(f'watch send posts failed with error {ex!r}')
+                logger.error(f'error send_posts routine: {ex}')
                 logger.exception(ex)
 
-            logger.info(f'watch send posts sleep for {send_posts_timeout}secs')
-            await asyncio.sleep(send_posts_timeout)
+            finally:
+                logger.info(f'sleep send_posts routine: {send_posts_timeout} secs')
+                await asyncio.sleep(send_posts_timeout)
 
     async def watch_update_posts():
         while True:
-            # Sleep before due to watch posts may be in progress
-            logger.info(f'watch update posts sleep for {update_posts_timeout}secs')
+            # Important: sleep before due to watch posts may be in progress
+            logger.info(f'sleep update_posts routine: {update_posts_timeout} secs')
             await asyncio.sleep(update_posts_timeout)
 
             try:
-                logger.info('watch update posts started')
-                global member_group_ids
-                member_group_ids = await sync_groups_membership(api, group_ids=group_ids)
-                for group_id in member_group_ids:
-                    await walk_wall_posts(api, store, owner_id=-group_id, max_offset=30)
+                logger.info('start update_posts routine')
+                for item in store.get_groups():
+                    if item['is_member']:
+                        await walk_wall_posts(api, store, owner_id=-item['group_id'], max_offset=30)
 
             except Exception as ex:
-                logger.error(f'watch update posts failed with error {ex!r}')
+                logger.error(f'error update_posts routine: {ex}')
                 logger.exception(ex)
 
     async def watch_walk_posts():
         while True:
             try:
-                logger.info('watch walk posts started')
-                global member_group_ids
-                member_group_ids = await sync_groups_membership(api, group_ids=group_ids)
-                for group_id in member_group_ids:
-                    await walk_wall_posts(api, store, owner_id=-group_id)
+                logger.info('start walk_posts routine')
+                async for item in store.get_groups():
+                    await walk_wall_posts(api, store, owner_id=-item['group_id'])
 
             except Exception as ex:
-                logger.error(f'watch walk posts failed with error {ex!r}')
+                logger.error(f'error walk_posts routine: {ex}')
                 logger.exception(ex)
 
-            logger.info(f'watch walk posts sleep for {walk_posts_timeout}secs')
-            await asyncio.sleep(walk_posts_timeout)
+            finally:
+                logger.info(f'sleep walk_posts routine: {walk_posts_timeout} secs')
+                await asyncio.sleep(walk_posts_timeout)
 
     async def watch_store_photos():
         while True:
             try:
-                logger.info('watch store photos started')
+                logger.info('start store_photos routine')
                 await store_photos(session, store,
                                    store_photos_path=store_photos_path)
 
             except Exception as ex:
-                logger.error(f'watch store photos failed with error {ex!r}')
+                logger.error(f'error store_photos routine: {ex}')
                 logger.exception(ex)
 
-            logger.info(f'watch store photos sleeps for {store_photos_timeout}secs')
-            await asyncio.sleep(store_photos_timeout)
+            finally:
+                logger.info(f'sleep store_photos routine: {store_photos_timeout} secs')
+                await asyncio.sleep(store_photos_timeout)
+
+    async def watch_sync_groups_membership():
+        while True:
+            try:
+                logger.info('start sync_groups_membership routine')
+                async for item in store.get_groups(is_member=False):
+                    is_member = await sync_group_membership(api, group_id=item['group_id'])
+                    await store.upsert_group(group_id=item['group_id'], is_member=is_member)
+
+            except Exception as ex:
+                logger.error(f'error sync_groups_membership routine: {ex}')
+                logger.exception(ex)
+
+            finally:
+                logger.info(f'sleep sync_groups_membership routine: {walk_posts_timeout} secs')
+                await asyncio.sleep(walk_posts_timeout)
 
     logger.info(f'init dispatcher with message handlers')
     dispatcher = apply_handlers(
@@ -209,11 +219,12 @@ if __name__ == '__main__':
 
     async def startup(_):
         logger.info('startup callbacks')
-        # asyncio.ensure_future(watch_send_posts())
-        # asyncio.ensure_future(watch_walk_posts())
-        # asyncio.ensure_future(watch_update_posts())
-        # if store_photos_path:
-        #     asyncio.ensure_future(watch_store_photos())
+        asyncio.ensure_future(watch_send_posts())
+        asyncio.ensure_future(watch_walk_posts())
+        asyncio.ensure_future(watch_update_posts())
+        asyncio.ensure_future(watch_sync_groups_membership())
+        if store_photos_path:
+            asyncio.ensure_future(watch_store_photos())
 
     async def shutdown(_):
         logger.info('shutdown callbacks')
