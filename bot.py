@@ -9,7 +9,7 @@ import os
 
 from aiogram.contrib.fsm_storage.memory import MemoryStorage
 from handlers import apply_handlers
-from jobs import send_post, store_photos, sync_group_membership, walk_wall_posts
+from jobs import send_post, store_photos, sync_groups_membership, walk_wall_posts
 from store import BaseStore, create_store
 from vk import ImplicitSession
 
@@ -102,11 +102,13 @@ if __name__ == '__main__':
     logger.info(
         f'use vk api max_requests_period={max_requests_period} max_requests_per_period={max_requests_per_period}')
 
-    session = ImplicitSession(
+    logger.info('authorize and copy vk session')
+    jobs_vk_session = ImplicitSession(
         login=username, password=password, app_id=app_id, scope=app_scope,
         max_requests_period=max_requests_period, max_requests_per_period=max_requests_per_period)
+    asyncio.get_event_loop().run_until_complete(jobs_vk_session.authorize())  # TODO: not so good solution
 
-    api = aiovk.API(session=session)
+    bot_vk_session = aiovk.TokenSession(access_token=jobs_vk_session.access_token)
 
     store_photos_path = get_config_value('store_photos_path')
     if store_photos_path:
@@ -161,7 +163,7 @@ if __name__ == '__main__':
                 logger.info('start update_posts routine')
                 for item in store.get_groups():
                     if item['is_member']:
-                        await walk_wall_posts(api, store, owner_id=-item['group_id'], max_offset=30)
+                        await walk_wall_posts(jobs_vk_session, store, owner_id=-item['group_id'], max_offset=30)
 
             except Exception as ex:
                 logger.error(f'error update_posts routine: {ex}')
@@ -172,7 +174,7 @@ if __name__ == '__main__':
             try:
                 logger.info('start walk_posts routine')
                 async for item in store.get_groups():
-                    await walk_wall_posts(api, store, owner_id=-item['group_id'])
+                    await walk_wall_posts(jobs_vk_session, store, owner_id=-item['group_id'])
 
             except Exception as ex:
                 logger.error(f'error walk_posts routine: {ex}')
@@ -186,7 +188,7 @@ if __name__ == '__main__':
         while True:
             try:
                 logger.info('start store_photos routine')
-                await store_photos(session, store,
+                await store_photos(jobs_vk_session, store,
                                    store_photos_path=store_photos_path)
 
             except Exception as ex:
@@ -201,9 +203,7 @@ if __name__ == '__main__':
         while True:
             try:
                 logger.info('start sync_groups_membership routine')
-                async for item in store.get_groups(is_member=False):
-                    is_member = await sync_group_membership(api, group_id=item['group_id'])
-                    await store.upsert_group(group_id=item['group_id'], is_member=is_member)
+                await sync_groups_membership(jobs_vk_session, store)
 
             except Exception as ex:
                 logger.error(f'error sync_groups_membership routine: {ex}')
@@ -215,7 +215,7 @@ if __name__ == '__main__':
 
     logger.info(f'init dispatcher with message handlers')
     dispatcher = apply_handlers(
-        dispatcher=aiogram.Dispatcher(bot=bot, storage=MemoryStorage()), store=store, api=api)
+        dispatcher=aiogram.Dispatcher(bot=bot, storage=MemoryStorage()), store=store, session=bot_vk_session)
 
     async def startup(_):
         logger.info('startup callbacks')
@@ -228,7 +228,8 @@ if __name__ == '__main__':
 
     async def shutdown(_):
         logger.info('shutdown callbacks')
-        await session.close()
+        await jobs_vk_session.close()
+        await bot_vk_session.close()
         store.close()
 
     logger.info('init polling')

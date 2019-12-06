@@ -24,7 +24,7 @@ class Membership(enum.Enum):
 async def check_group_membership(api: aiovk.API, group_id):
     response = await api.groups.isMember(group_id=group_id, extended=1)
     for membership in Membership:
-        if response[membership.value]:
+        if response.get(membership.value):
             logger.debug(f'check group_id={group_id} membership={membership}')
             return membership
 
@@ -36,19 +36,15 @@ async def sync_group_membership(api: aiovk.API, group_id):
         response = await api.groups.join(group_id=group_id)
         logger.debug(f'request group_id={group_id} membership={response}')
         membership = await check_group_membership(api, group_id=group_id)
-    if membership == Membership.MEMBER:
-        return True
+    return membership == Membership.MEMBER
 
 
-async def sync_groups_membership(api: aiovk.API, group_ids):
-    member_group_ids = []
-    logger.info(f'sync group_ids={group_ids} membership')
-    for group_id in group_ids:
-        is_member = await sync_group_membership(api, group_id=group_id)
-        if is_member:
-            member_group_ids.append(group_id)
-    logger.info(f'member group_ids={member_group_ids} count=[{len(member_group_ids)}/{len(group_ids)}]')
-    return member_group_ids
+async def sync_groups_membership(session: aiovk.TokenSession, store: BaseStore):
+    api = aiovk.API(session=session)
+    async for item in store.get_groups(is_member=False):
+        logger.info(f'sync membership group_id={item["group_id"]}')
+        is_member = await sync_group_membership(api, group_id=item['group_id'])
+        await store.upsert_group(group_id=item['group_id'], is_member=is_member)
 
 
 @backoff.on_exception(backoff.expo, Exception, max_tries=5)
@@ -74,9 +70,10 @@ async def generate_wall_posts(api: aiovk.API, owner_id, limit):
             break
 
 
-async def walk_wall_posts(api: aiovk.API, store: BaseStore, owner_id, max_offset=None):
+async def walk_wall_posts(session: aiovk.TokenSession, store: BaseStore, owner_id, max_offset=None):
     logger.info(f'walk wall posts owner_id={owner_id} max_offset={max_offset}')
 
+    api = aiovk.API(session=session)
     async for fields, offset, count in generate_wall_posts(api, owner_id=owner_id, limit=MAX_POSTS_COUNT):
         post_id = fields.pop('id')
         owner_id = fields.pop('owner_id')
@@ -92,7 +89,7 @@ async def walk_wall_posts(api: aiovk.API, store: BaseStore, owner_id, max_offset
             break
 
 
-async def store_photos(session: ImplicitSession, store: BaseStore, store_photos_path: str, max_count=10):
+async def store_photos(session: aiovk.TokenSession, store: BaseStore, store_photos_path: str, max_count=10):
     logger.info(f'store photos max_count={max_count}')
 
     store_count = 0

@@ -12,7 +12,8 @@ logger = logging.getLogger(__name__)
 subscribe_url_state = State('subscribe_url')
 
 
-def apply_handlers(dispatcher: aiogram.Dispatcher, store: BaseStore, api: aiovk.API):
+def apply_handlers(dispatcher: aiogram.Dispatcher, store: BaseStore, session: aiovk.TokenSession):
+    api = aiovk.API(session=session)
     bot = dispatcher.bot
 
     @dispatcher.message_handler(commands=['start', ])
@@ -44,6 +45,7 @@ def apply_handlers(dispatcher: aiogram.Dispatcher, store: BaseStore, api: aiovk.
 
             group_url = message.text
 
+            # TODO: add url processing without SCHEME prefix
             short_name = urllib.parse.urlparse(group_url).path.strip('/')
 
             await bot.send_message(chat_id=message.chat.id, text=f'Wait! We\'re trying to subscribe...')
@@ -53,7 +55,7 @@ def apply_handlers(dispatcher: aiogram.Dispatcher, store: BaseStore, api: aiovk.
             group = (await api.groups.getById(group_id=short_name))[0]
             group_fields = {
                 'name': group['name'],
-                'short_name': short_name,
+                'url': group_url,
                 'is_member': await sync_group_membership(api, group_id=group['id'])
             }
             await store.upsert_group(group_id=group['id'], **group_fields)
