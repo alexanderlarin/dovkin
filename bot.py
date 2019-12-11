@@ -131,6 +131,7 @@ if __name__ == '__main__':
         async for chat in store.get_chats():
             chat_id = chat['chat_id']
             try:
+                logger.info(f'send posts to chat_id={chat_id}')
                 # Important: try to find group_ids where fake account is member
                 member_group_ids = [item['group_id'] async for item in store.get_groups(is_member=True)]
                 group_ids = [item['group_id'] async for item in store.get_subscriptions(chat_id=chat_id)

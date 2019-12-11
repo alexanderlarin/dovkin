@@ -65,7 +65,7 @@ class TinyDBStore(BaseStore):
             yield item
 
     async def upsert_chat(self, chat_id, **fields):
-        return self.groups.upsert({'chat_id': chat_id, **fields}, where('chart_id') == chat_id)
+        return self.chats.upsert({'chat_id': chat_id, **fields}, where('chat_id') == chat_id)
 
     async def get_groups(self, is_member=None):
         for item in self.get_items('groups', is_member=is_member):
