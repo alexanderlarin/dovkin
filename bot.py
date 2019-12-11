@@ -4,7 +4,7 @@ import aiogram
 import aiovk
 import argparse
 import json
-import logging.handlers
+import logging.config
 import os
 
 from aiogram.contrib.fsm_storage.memory import MemoryStorage
@@ -36,14 +36,10 @@ if __name__ == '__main__':
 
     args = parser.parse_args()
 
-    # TODO: move logging config to JSON
     logging.basicConfig(level=logging.DEBUG,
                         format='[%(asctime)s][%(levelname)s][%(name)s] %(message)s',
                         datefmt='%H:%M:%S',
-                        handlers=[logging.StreamHandler(),
-                                  logging.handlers.TimedRotatingFileHandler(args.log_file,
-                                                                            when='h', interval=24,
-                                                                            backupCount=2)])
+                        handlers=[logging.StreamHandler()])
 
     config = {}
     if args.config:
@@ -55,6 +51,9 @@ if __name__ == '__main__':
             logger.error(f'config={args.config} not found')
     else:
         logger.info(f'no config set, read from args')
+
+    if 'logging' in config:
+        logging.config.dictConfig(config['logging'])
 
     def get_config_value(key, required=False):
         value = config.get(key) if config else args[key]
