@@ -1,0 +1,15 @@
+-i https://pypi.org/simple
+aiofiles==0.4.0
+aiogram==2.4
+aiohttp==3.6.2
+async-timeout==3.0.1
+attrs==19.3.0
+babel==2.7.0
+backoff==1.10.0
+certifi==2019.11.28
+chardet==3.0.4
+git+https://github.com/alexanderlarin/aiovk.git@0bbe8304c183d9b761cf7fa42eab6f257a34cdce#egg=aiovk
+idna==2.8
+multidict==4.7.0
+pytz==2019.3
+yarl==1.4.2
