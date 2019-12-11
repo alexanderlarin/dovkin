@@ -10,12 +10,28 @@ class BaseStore(ABC):
         yield
 
     @abstractmethod
-    async def add_chat(self, chat_id):
+    async def upsert_chat(self, chat_id, **fields):
         pass
 
     @abstractmethod
-    async def remove_chat(self, chat_id):
+    async def get_groups(self, is_member=None):
+        yield
+
+    @abstractmethod
+    async def upsert_group(self, group_id, **fields):
         pass
+
+    @abstractmethod
+    async def get_subscriptions(self, chat_id=None):
+        yield
+
+    @abstractmethod
+    async def add_subscription(self, chat_id, group_id):
+        pass
+
+    # @abstractmethod
+    # async def remove_subscription(self, chat_id, group_id):
+    #     pass
 
     @abstractmethod
     async def get_wall_posts(self, owner_id=None):
