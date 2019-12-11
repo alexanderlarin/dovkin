@@ -30,7 +30,7 @@ if __name__ == '__main__':
     parser.add_argument('--telegram-bot-token', help='telegram bot token given by BotFather bot')
     parser.add_argument('--proxy-url', help='proxy server url')
     parser.add_argument('--proxy-auth', help='proxy server credentials in <login:password> format')
-    parser.add_argument('--store', default='tinydb://db.tinydb', help='path to JSON-formatted local store file')
+    parser.add_argument('--store', help='path to JSON-formatted local store file')
     parser.add_argument('--store-photos-dir', help='path to downloaded photos store')
     parser.add_argument('--log-file', default='bot.log', help='log file path')
 
@@ -44,10 +44,6 @@ if __name__ == '__main__':
                                   logging.handlers.TimedRotatingFileHandler(args.log_file,
                                                                             when='h', interval=24,
                                                                             backupCount=2)])
-
-    logger.info(f'create store connection_uri={args.store}')
-    store: BaseStore = create_store(args.store)
-    # store: BaseStore = MongoDBStore("mongodb://localhost:27017/dovkin")
 
     config = {}
     if args.config:
@@ -66,6 +62,10 @@ if __name__ == '__main__':
             raise ValueError(f'{key} value is required but was missed')
         return value
 
+    store_config = get_config_value('store', required=True)
+    logger.info(f'create store connection_uri={store_config}')
+    store: BaseStore = create_store(store_config)
+
     def get_username_password(auth):
         values = auth.split(':')
         if len(values) != 2:
@@ -73,7 +73,7 @@ if __name__ == '__main__':
         return values[0], values[1]
 
     token = get_config_value('telegram_bot_token', required=True)
-    logger.info(f'init bot with token={token}')
+    logger.info(f'create bot with token={token}')
 
     proxy_params = {}
     proxy_url = get_config_value('proxy_url')
@@ -89,7 +89,7 @@ if __name__ == '__main__':
     bot = aiogram.Bot(token=token, **proxy_params)
 
     app_id = get_config_value('vk_app_id', required=True)
-    logger.info(f'init vk session for app_id={app_id}')
+    logger.info(f'create vk session for app_id={app_id}')
     app_scope = get_config_value('vk_app_scope')
     if not isinstance(app_scope, list):
         app_scope = [scope for scope in app_scope.split(',') if scope]
@@ -221,7 +221,7 @@ if __name__ == '__main__':
                 logger.info(f'sleep sync_groups_membership routine: {walk_posts_timeout} secs')
                 await asyncio.sleep(walk_posts_timeout)
 
-    logger.info(f'init dispatcher with message handlers')
+    logger.info(f'create dispatcher with message handlers')
     dispatcher = apply_handlers(
         dispatcher=aiogram.Dispatcher(bot=bot, storage=MemoryStorage()), store=store, session=bot_vk_session)
 
@@ -240,6 +240,5 @@ if __name__ == '__main__':
         await bot_vk_session.close()
         store.close()
 
-    logger.info('init polling')
     aiogram.executor.start_polling(
         dispatcher, on_startup=startup, on_shutdown=shutdown)
