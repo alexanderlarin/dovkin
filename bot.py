@@ -9,7 +9,7 @@ import os
 
 from aiogram.contrib.fsm_storage.memory import MemoryStorage
 from handlers import apply_handlers
-from jobs import send_post, store_photos, sync_groups_membership, walk_wall_posts
+from jobs import send_post, store_photos, sync_groups_membership, walk_wall_posts, MAX_POSTS_COUNT
 from store import BaseStore, create_store
 from vk import ImplicitSession
 
@@ -170,7 +170,8 @@ if __name__ == '__main__':
                 logger.info('start update_posts routine')
                 for item in store.get_groups():
                     if item['is_member']:
-                        await walk_wall_posts(jobs_vk_session, store, owner_id=-item['group_id'], max_offset=30)
+                        await walk_wall_posts(
+                            jobs_vk_session, store, owner_id=-item['group_id'], max_offset=MAX_POSTS_COUNT)
 
             except Exception as ex:
                 logger.error(f'error update_posts routine: {ex}')

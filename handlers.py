@@ -1,10 +1,11 @@
 import aiogram
 import aiovk
+import asyncio
 import logging
 import urllib.parse
 
 from aiogram.dispatcher.filters.state import State
-from jobs import sync_group_membership
+from jobs import send_post, sync_group_membership, walk_wall_posts, MAX_POSTS_COUNT
 from store import BaseStore
 
 logger = logging.getLogger(__name__)
@@ -65,7 +66,16 @@ def apply_handlers(dispatcher: aiogram.Dispatcher, store: BaseStore, session: ai
             logger.info(f'add subscription chat_id={message.chat.id} group_id={group["id"]}')
             await bot.send_message(chat_id=message.chat.id, text=f'You\'re subscribed to {group_url}')
 
-            # TODO: send post immediately and run wall posts update
+            async def walk_posts_and_send_one():
+                owner_id = -group['id']
+                if group_fields['is_member']:
+                    logger.info(f'send post from owner_id={owner_id} to chat_id={message.chat.id} immediately')
+                    await walk_wall_posts(session, store, owner_id=-group['id'], max_offset=MAX_POSTS_COUNT)
+                    await send_post(bot, store, chat_id=message.chat.id, owner_id=-group['id'])
+                else:
+                    logger.warning(f'can\'t send post from owner_id={owner_id} because fake user is not group member')
+
+            asyncio.ensure_future(walk_posts_and_send_one())
 
         except Exception as ex:
             logger.error(f'trouble in message={message.text} processing')
