@@ -5,10 +5,9 @@ import backoff
 import enum
 import logging
 import os
-import random
 
 from store.base import BaseStore
-from vk import get_photos, ImplicitSession
+from vk import get_photos
 
 logger = logging.getLogger(__name__)
 
@@ -115,28 +114,22 @@ async def store_photos(session: aiovk.TokenSession, store: BaseStore, store_phot
             break
 
 
-async def send_post(bot: aiogram.Bot, store: BaseStore, chat_id):
-    member_group_ids = [item['group_id'] async for item in store.get_groups(is_member=True)]
-    group_ids = [item['group_id'] async for item in store.get_subscriptions(chat_id=chat_id)
-                 if item['group_id'] in member_group_ids]
-    if group_ids:
-        owner_id = -group_ids[random.randint(0, len(group_ids) - 1)]
-        logger.info(f'search post owner_id={owner_id} for chat_id={chat_id}')
+async def send_post(bot: aiogram.Bot, store: BaseStore, chat_id, owner_id):
+    logger.info(f'search post from owner_id={owner_id} to chat_id={chat_id}')
 
-        async for wall_post in store.get_wall_posts(owner_id=owner_id):
-            post_id = wall_post['post_id']
-            owner_id = wall_post['owner_id']  # Important: cause in this step we should have real owner_id not None
-            if not await store.is_chat_wall_post_exists(chat_id=chat_id, post_id=post_id, owner_id=owner_id):
-                photos = get_photos(wall_post)
-                if photos:
-                    logger.info(f'send posts to chat_id={chat_id} post_id={post_id}, photos={photos}')
-                    media = aiogram.types.MediaGroup()
-                    for photo in photos:
-                        media.attach_photo(photo['url'])
-                    await bot.send_media_group(chat_id, media=media)
-                    await store.add_chat_wall_post(owner_id=owner_id, post_id=post_id, chat_id=chat_id)
-                    logger.info(f'post owner_id={owner_id} post_id={post_id} sent chat_id={chat_id}')
+    async for wall_post in store.get_wall_posts(owner_id=owner_id):
+        post_id = wall_post['post_id']
+        owner_id = wall_post['owner_id']  # Important: cause in this step we should have real owner_id not None
+        if not await store.is_chat_wall_post_exists(chat_id=chat_id, post_id=post_id, owner_id=owner_id):
+            photos = get_photos(wall_post)
+            if photos:
+                logger.info(f'send post_id={post_id} owner_id={owner_id} with photos={photos} to chat_id={chat_id}')
+                media = aiogram.types.MediaGroup()
+                for photo in photos:
+                    media.attach_photo(photo['url'])
+                await bot.send_media_group(chat_id, media=media)
+                await store.add_chat_wall_post(owner_id=owner_id, post_id=post_id, chat_id=chat_id)
 
-                    return wall_post  # TODO: i'm not happy with this style :(
+                return wall_post
 
-    logger.warning(f'can\'t find post to send chat_id={chat_id}')
+    logger.warning(f'can\'t send post to chat_id={chat_id}')

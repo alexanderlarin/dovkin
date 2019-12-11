@@ -45,13 +45,13 @@ if __name__ == '__main__':
                                                                             when='h', interval=24,
                                                                             backupCount=2)])
 
-    logger.info(f'init store connection_uri={args.store}')
+    logger.info(f'create store connection_uri={args.store}')
     store: BaseStore = create_store(args.store)
     # store: BaseStore = MongoDBStore("mongodb://localhost:27017/dovkin")
 
     config = {}
     if args.config:
-        logger.info(f'read vars from config={args.config}')
+        logger.info(f'read config={args.config}')
         if os.path.exists(args.config) and os.path.isfile(args.config):
             with open(args.config) as stream:
                 config = json.load(stream)
@@ -132,8 +132,15 @@ if __name__ == '__main__':
         async for chat in store.get_chats():
             chat_id = chat['chat_id']
             try:
-                logger.info(f'send post to chat_id={chat_id}')
-                await send_post(bot, store, chat_id=chat_id)
+                # Important: try to find group_ids where fake account is member
+                member_group_ids = [item['group_id'] async for item in store.get_groups(is_member=True)]
+                group_ids = [item['group_id'] async for item in store.get_subscriptions(chat_id=chat_id)
+                             if item['group_id'] in member_group_ids]
+
+                await asyncio.gather(*[
+                    send_post(bot, store, chat_id=chat_id, owner_id=-group_id)
+                    for group_id in group_ids
+                ])
 
             except Exception as ex:
                 logger.error(f'send posts to chat_id={chat_id} failed')
