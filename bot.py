@@ -137,10 +137,8 @@ if __name__ == '__main__':
                 group_ids = [item['group_id'] async for item in store.get_subscriptions(chat_id=chat_id)
                              if item['group_id'] in member_group_ids]
 
-                await asyncio.gather(*[
-                    send_post(bot, store, chat_id=chat_id, owner_id=-group_id)
-                    for group_id in group_ids
-                ])
+                for group_id in group_ids:
+                    await send_post(bot, store, chat_id=chat_id, owner_id=-group_id)
 
             except Exception as ex:
                 logger.error(f'send posts to chat_id={chat_id} failed')
