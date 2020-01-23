@@ -26,33 +26,25 @@ class BaseStore(ABC):
         yield
 
     @abstractmethod
-    async def add_subscription(self, chat_id, group_id):
+    async def upsert_subscription(self, chat_id, group_id, **fields):
         pass
-
-    # @abstractmethod
-    # async def remove_subscription(self, chat_id, group_id):
-    #     pass
 
     @abstractmethod
     async def get_wall_posts(self, owner_id=None):
         yield
 
     @abstractmethod
-    async def get_wall_posts_count(self, owner_id):
+    async def count_wall_posts(self, owner_id):
         pass
 
     @abstractmethod
-    async def is_wall_post_exists(self, post_id, owner_id):
+    async def upsert_wall_post(self, post_id, owner_id, **fields):
         pass
 
     @abstractmethod
-    async def add_wall_post(self, post_id, owner_id, **fields):
+    async def next_chat_wall_post(self, chat_id, owner_id):
         pass
 
     @abstractmethod
-    async def add_chat_wall_post(self, chat_id, post_id, owner_id):
-        pass
-
-    @abstractmethod
-    async def is_chat_wall_post_exists(self, chat_id, post_id, owner_id):
+    async def upsert_chat_wall_post(self, chat_id, post_id, owner_id, **fields):
         pass

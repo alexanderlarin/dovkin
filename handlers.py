@@ -62,10 +62,11 @@ def apply_handlers(dispatcher: aiogram.Dispatcher, store: BaseStore, session: ai
             await store.upsert_group(group_id=group['id'], **group_fields)
             logger.info(f'upsert group_id={group["id"]} with short_name={short_name}')
 
-            await store.add_subscription(chat_id=message.chat.id, group_id=group['id'])
+            await store.upsert_subscription(chat_id=message.chat.id, group_id=group['id'])
             logger.info(f'add subscription chat_id={message.chat.id} group_id={group["id"]}')
             await bot.send_message(chat_id=message.chat.id, text=f'You\'re subscribed to {group_url}')
 
+            # TODO: refactor, look like a job
             async def walk_posts_and_send_one():
                 owner_id = -group['id']
                 if group_fields['is_member']:

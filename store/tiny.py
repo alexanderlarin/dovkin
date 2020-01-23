@@ -78,32 +78,29 @@ class TinyDBStore(BaseStore):
         for item in self.get_items('subscriptions', chat_id=chat_id):
             yield item
 
-    async def add_subscription(self, chat_id, group_id):
-        if not self.subscriptions.contains((where('chat_id') == chat_id) & (where('group_id') == group_id)):
-            return self.subscriptions.insert({'chat_id': chat_id, 'group_id': group_id})
+    async def upsert_subscription(self, chat_id, group_id, **fields):
+        keys = {'chat_id': chat_id, 'group_id': group_id}
+        return self.subscriptions.upsert({**keys, **fields}, self.get_filters(**keys))
 
-    async def is_wall_post_exists(self, post_id, owner_id):
-        return self.wall_posts.contains((where('post_id') == post_id) &
-                                        (where('owner_id') == owner_id))
-
-    async def add_wall_post(self, post_id, owner_id, **fields):
-        if not await self.is_wall_post_exists(post_id, owner_id):
-            return self.wall_posts.insert({'post_id': post_id, 'owner_id': owner_id, **fields})
+    async def upsert_wall_post(self, post_id, owner_id, **fields):
+        keys = {'post_id': post_id, 'owner_id': owner_id}
+        return self.wall_posts.upsert({**keys, **fields}, self.get_filters(**keys))
 
     async def get_wall_posts(self, owner_id=None):
-        posts = self.wall_posts.search(where('owner_id') == owner_id) if owner_id else self.wall_posts.all()
-        posts = sorted(posts, key=lambda item: item['date'], reverse=True)  # TODO: it's not obvious
-        for post in posts:
+        for post in self.get_items('wall_posts', owner_id=owner_id):
             yield post
 
-    async def get_wall_posts_count(self, owner_id):
-        return self.wall_posts.count(where('owner_id') == owner_id)
+    async def count_wall_posts(self, owner_id):
+        return self.wall_posts.count(self.get_filters(owner_id=owner_id))
 
-    async def add_chat_wall_post(self, chat_id, post_id, owner_id):
-        if not await self.is_chat_wall_post_exists(chat_id, post_id, owner_id):
-            return self.chat_wall_posts.insert({'chat_id': chat_id, 'post_id': post_id, 'owner_id': owner_id})
+    async def next_chat_wall_post(self, chat_id, owner_id):
+        items = [
+            item async for item in self.get_wall_posts(owner_id=owner_id)
+            if not self.chat_wall_posts.contains(
+                self.get_filters(chat_id=chat_id, owner_id=owner_id, post_id=item['post_id']))
+        ]
+        return max(items, key=lambda post: post['date'])
 
-    async def is_chat_wall_post_exists(self, chat_id, post_id, owner_id):
-        return self.chat_wall_posts.contains((where('chat_id') == chat_id) &
-                                             (where('post_id') == post_id) &
-                                             (where('owner_id') == owner_id))
+    async def upsert_chat_wall_post(self, chat_id, post_id, owner_id, **fields):
+        keys = {'chat_id': chat_id, 'post_id': post_id, 'owner_id': owner_id}
+        return self.chat_wall_posts.upsert({**keys, **fields}, self.get_filters(**keys))
