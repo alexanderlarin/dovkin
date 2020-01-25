@@ -17,7 +17,7 @@ class TinyDBStore(BaseStore):
         caching_middleware.WRITE_CACHE_SIZE = 1
         self._db = TinyDB(path, storage=caching_middleware)
 
-    def close(self):
+    async def close(self):
         logger.info('flush and close')
         self._db.close()
 
@@ -78,9 +78,9 @@ class TinyDBStore(BaseStore):
         for item in self.get_items('subscriptions', chat_id=chat_id):
             yield item
 
-    async def upsert_subscription(self, chat_id, group_id, **fields):
+    async def upsert_subscription(self, chat_id, group_id, **options):
         keys = {'chat_id': chat_id, 'group_id': group_id}
-        return self.subscriptions.upsert({**keys, **fields}, self.get_filters(**keys))
+        return self.subscriptions.upsert({**keys, **options}, self.get_filters(**keys))
 
     async def upsert_wall_post(self, post_id, owner_id, **fields):
         keys = {'post_id': post_id, 'owner_id': owner_id}

@@ -2,7 +2,7 @@ from abc import ABC, abstractmethod
 
 
 class BaseStore(ABC):
-    def close(self):
+    async def close(self):
         pass
 
     @abstractmethod
@@ -18,7 +18,7 @@ class BaseStore(ABC):
         yield
 
     @abstractmethod
-    async def upsert_group(self, group_id, **fields):
+    async def upsert_group(self, group_id, is_member, **fields):
         pass
 
     @abstractmethod
@@ -26,7 +26,7 @@ class BaseStore(ABC):
         yield
 
     @abstractmethod
-    async def upsert_subscription(self, chat_id, group_id, **fields):
+    async def upsert_subscription(self, chat_id, group_id, **options):
         pass
 
     @abstractmethod
