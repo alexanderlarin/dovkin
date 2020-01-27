@@ -95,7 +95,7 @@ class PostgresDBStore(BaseStore):
         async with self._pool.acquire() as connection:
             async with connection.transaction():
                 async for item in connection.cursor(
-                        'SELECT chat_id, group_id, options::json FROM subscription WHERE chat_id IS NULL OR chat_id = $1',
+                        'SELECT chat_id, group_id, options::json FROM subscription WHERE $1::int IS NULL OR chat_id = $1',
                         chat_id):
                     yield {'chat_id': item['chat_id'], 'group_id': item['group_id'], **item['options']}
 
@@ -112,7 +112,7 @@ class PostgresDBStore(BaseStore):
         async with self._pool.acquire() as connection:
             async with connection.transaction():
                 async for item in connection.cursor(
-                        'SELECT post_id, owner_id, fields::json FROM wall_post WHERE owner_id IS NULL OR owner_id = $1',
+                        'SELECT post_id, owner_id, fields::json FROM wall_post WHERE $1::int IS NULL OR owner_id = $1',
                         owner_id):
                     yield {'post_id': item['post_id'], 'owner_id': item['owner_id'], **item['fields']}
 
