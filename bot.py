@@ -67,6 +67,7 @@ if __name__ == '__main__':
     logger.info(f'connect store connection_uri={store_config}')
     store: BaseStore = asyncio.get_event_loop().run_until_complete(connect_store(store_config))
 
+
     def get_username_password(auth):
         values = auth.split(':')
         if len(values) != 2:
@@ -104,13 +105,15 @@ if __name__ == '__main__':
     logger.info(
         f'use vk api max_requests_period={max_requests_period} max_requests_per_period={max_requests_per_period}')
 
-    def create_vk_session(**options):
+
+    def create_vk_session():
         return ImplicitSession(
-            login=username, password=password, app_id=app_id, scope=app_scope, **options)
+            login=username, password=password, app_id=app_id, scope=app_scope,
+            max_requests_period=max_requests_period, max_requests_per_period=max_requests_per_period)
+
 
     logger.info('create jobs vk session')
-    jobs_vk_session = create_vk_session(
-        max_requests_period=max_requests_period, max_requests_per_period=max_requests_per_period)
+    jobs_vk_session = create_vk_session()
 
     logger.info('create bot vk session')
     bot_vk_session = create_vk_session()
