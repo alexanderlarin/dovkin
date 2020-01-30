@@ -104,13 +104,16 @@ if __name__ == '__main__':
     logger.info(
         f'use vk api max_requests_period={max_requests_period} max_requests_per_period={max_requests_per_period}')
 
-    logger.info('authorize and copy vk session')
-    jobs_vk_session = ImplicitSession(
-        login=username, password=password, app_id=app_id, scope=app_scope,
-        max_requests_period=max_requests_period, max_requests_per_period=max_requests_per_period)
-    asyncio.get_event_loop().run_until_complete(jobs_vk_session.authorize())  # TODO: not so good solution
+    def create_vk_session(**options):
+        return ImplicitSession(
+            login=username, password=password, app_id=app_id, scope=app_scope, **options)
 
-    bot_vk_session = aiovk.TokenSession(access_token=jobs_vk_session.access_token)
+    logger.info('create jobs vk session')
+    jobs_vk_session = create_vk_session(
+        max_requests_period=max_requests_period, max_requests_per_period=max_requests_per_period)
+
+    logger.info('create bot vk session')
+    bot_vk_session = create_vk_session()
 
     store_photos_path = get_config_value('store_photos_path')
     if store_photos_path:
