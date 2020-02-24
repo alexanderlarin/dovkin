@@ -10,11 +10,10 @@ import os
 from aiogram.contrib.fsm_storage.memory import MemoryStorage
 from handlers import apply_handlers
 from jobs import send_post, store_photos, sync_groups_membership, walk_wall_posts, MAX_POSTS_COUNT
-from store import BaseStore, create_store
+from store import BaseStore, connect_store
 from vk import ImplicitSession
 
 logger = logging.getLogger('bot')
-
 
 if __name__ == '__main__':
     parser = argparse.ArgumentParser(description='Telegram bot for vk.com photos gathering in messenger chat',
@@ -36,10 +35,11 @@ if __name__ == '__main__':
 
     args = parser.parse_args()
 
-    logging.basicConfig(level=logging.DEBUG,
-                        format='[%(asctime)s][%(levelname)s][%(name)s] %(message)s',
-                        datefmt='%H:%M:%S',
-                        handlers=[logging.StreamHandler()])
+    logging.basicConfig(
+        level=logging.DEBUG,
+        format='[%(asctime)s][%(levelname)s][%(name)s] %(message)s',
+        datefmt='%H:%M:%S',
+        handlers=[logging.StreamHandler()])
 
     config = {}
     if args.config:
@@ -55,21 +55,25 @@ if __name__ == '__main__':
     if 'logging' in config:
         logging.config.dictConfig(config['logging'])
 
+
     def get_config_value(key, required=False):
         value = config.get(key) if config else args[key]
         if not value and required:
             raise ValueError(f'{key} value is required but was missed')
         return value
 
+
     store_config = get_config_value('store', required=True)
-    logger.info(f'create store connection_uri={store_config}')
-    store: BaseStore = create_store(store_config)
+    logger.info(f'connect store connection_uri={store_config}')
+    store: BaseStore = asyncio.get_event_loop().run_until_complete(connect_store(store_config))
+
 
     def get_username_password(auth):
         values = auth.split(':')
         if len(values) != 2:
             raise ValueError(f'auth {auth} should be in "username:password" format')
         return values[0], values[1]
+
 
     token = get_config_value('telegram_bot_token', required=True)
     logger.info(f'create bot with token={token}')
@@ -101,13 +105,18 @@ if __name__ == '__main__':
     logger.info(
         f'use vk api max_requests_period={max_requests_period} max_requests_per_period={max_requests_per_period}')
 
-    logger.info('authorize and copy vk session')
-    jobs_vk_session = ImplicitSession(
-        login=username, password=password, app_id=app_id, scope=app_scope,
-        max_requests_period=max_requests_period, max_requests_per_period=max_requests_per_period)
-    asyncio.get_event_loop().run_until_complete(jobs_vk_session.authorize())  # TODO: not so good solution
 
-    bot_vk_session = aiovk.TokenSession(access_token=jobs_vk_session.access_token)
+    def create_vk_session():
+        return ImplicitSession(
+            login=username, password=password, app_id=app_id, scope=app_scope,
+            max_requests_period=max_requests_period, max_requests_per_period=max_requests_per_period)
+
+
+    logger.info('create jobs vk session')
+    jobs_vk_session = create_vk_session()
+
+    logger.info('create bot vk session')
+    bot_vk_session = create_vk_session()
 
     store_photos_path = get_config_value('store_photos_path')
     if store_photos_path:
@@ -127,6 +136,7 @@ if __name__ == '__main__':
     store_photos_timeout = get_config_value('store_photos_timeout', required=store_photos_path)
     logger.info(f'use store_photos_timeout={store_photos_timeout}')
 
+
     async def send_posts():
         async for chat in store.get_chats():
             chat_id = chat['chat_id']
@@ -144,6 +154,7 @@ if __name__ == '__main__':
                 logger.error(f'send posts to chat_id={chat_id} failed')
                 logger.exception(ex)
 
+
     async def watch_send_posts():
         while True:
             try:
@@ -157,6 +168,7 @@ if __name__ == '__main__':
             finally:
                 logger.info(f'sleep send_posts routine: {send_posts_timeout} secs')
                 await asyncio.sleep(send_posts_timeout)
+
 
     async def watch_update_posts():
         while True:
@@ -175,6 +187,7 @@ if __name__ == '__main__':
                 logger.error(f'error update_posts routine: {ex}')
                 logger.exception(ex)
 
+
     async def watch_walk_posts():
         while True:
             try:
@@ -189,6 +202,7 @@ if __name__ == '__main__':
             finally:
                 logger.info(f'sleep walk_posts routine: {walk_posts_timeout} secs')
                 await asyncio.sleep(walk_posts_timeout)
+
 
     async def watch_store_photos():
         while True:
@@ -205,6 +219,7 @@ if __name__ == '__main__':
                 logger.info(f'sleep store_photos routine: {store_photos_timeout} secs')
                 await asyncio.sleep(store_photos_timeout)
 
+
     async def watch_sync_groups_membership():
         while True:
             try:
@@ -219,9 +234,11 @@ if __name__ == '__main__':
                 logger.info(f'sleep sync_groups_membership routine: {walk_posts_timeout} secs')
                 await asyncio.sleep(walk_posts_timeout)
 
+
     logger.info(f'create dispatcher with message handlers')
     dispatcher = apply_handlers(
         dispatcher=aiogram.Dispatcher(bot=bot, storage=MemoryStorage()), store=store, session=bot_vk_session)
+
 
     async def startup(_):
         logger.info('startup callbacks')
@@ -232,11 +249,13 @@ if __name__ == '__main__':
         if store_photos_path:
             asyncio.ensure_future(watch_store_photos())
 
+
     async def shutdown(_):
         logger.info('shutdown callbacks')
         await jobs_vk_session.close()
         await bot_vk_session.close()
-        store.close()
+        await store.close()
+
 
     aiogram.executor.start_polling(
         dispatcher, on_startup=startup, on_shutdown=shutdown)
