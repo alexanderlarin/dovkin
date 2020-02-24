@@ -89,6 +89,7 @@ async def walk_wall_posts(session: aiovk.TokenSession, store: BaseStore, owner_i
 
 
 async def store_photos(session: aiovk.TokenSession, store: BaseStore, store_photos_path: str, max_count=10):
+    # TODO: store in different folders
     logger.info(f'store photos max_count={max_count}')
 
     store_count = 0
