@@ -1,6 +1,7 @@
 import aiogram
 import aiovk
 import asyncio
+import enum
 import logging
 import urllib.parse
 
@@ -11,6 +12,12 @@ from store import BaseStore
 logger = logging.getLogger(__name__)
 
 subscribe_url_state = State('subscribe_url')
+subscriptions_state = State('subscriptions_state')
+subscription_state = State('subscription_state')
+
+class Action(enum.Enum):
+    back = 'back'
+    remove = 'remove'
 
 
 def apply_handlers(dispatcher: aiogram.Dispatcher, store: BaseStore, session: aiovk.TokenSession):
@@ -31,6 +38,56 @@ def apply_handlers(dispatcher: aiogram.Dispatcher, store: BaseStore, session: ai
         if current_state:
             logging.info(f'cancel chat_id={message.chat.id} state=={current_state}')
             await state.finish()
+
+    async def get_subscriptions_message(chat_id):
+        reply_markup = aiogram.types.InlineKeyboardMarkup(row_width=1)
+        async for s in store.get_subscriptions(chat_id=chat_id):
+            reply_markup.add(
+                aiogram.types.InlineKeyboardButton(text=s['group']['name'], callback_data=s['group']['group_id']))
+        return 'Choose a subscription from the list below:', reply_markup
+
+    @dispatcher.message_handler(commands=['subscriptions', ])
+    async def get_subscriptions(message: aiogram.types.Message):
+        text, reply_markup = await get_subscriptions_message(message.chat.id)
+        await bot.send_message(chat_id=message.chat.id, text=text, reply_markup=reply_markup)
+        await subscriptions_state.set()
+
+    @dispatcher.callback_query_handler(
+        aiogram.filters.Text(equals=Action.back.value), state=subscriptions_state)
+    async def back_subscriptions(callback_query: aiogram.types.CallbackQuery, state: aiogram.dispatcher.FSMContext):
+        text, reply_markup = await get_subscriptions_message(callback_query.message.chat.id)
+        await callback_query.message.edit_text(text=text, reply_markup=reply_markup)
+        await subscriptions_state.set()
+        await state.reset_data()
+
+    @dispatcher.callback_query_handler(state=subscriptions_state)
+    async def get_subscription(callback_query: aiogram.types.CallbackQuery, state: aiogram.dispatcher.FSMContext):
+        async for s in store.get_subscriptions(chat_id=callback_query.message.chat.id):
+            if s['group']['group_id'] == int(callback_query.data):
+                await callback_query.answer()
+
+                reply_markup = aiogram.types.InlineKeyboardMarkup(row_width=2)
+                reply_markup.add(aiogram.types.InlineKeyboardButton(text='Remove', callback_data=Action.remove.value))
+                reply_markup.add(aiogram.types.InlineKeyboardButton(text='«Back', callback_data=Action.back.value))
+
+                await callback_query.message.edit_text(
+                    text=f'Here it is: {s["group"]["name"]}\nWhat do you want to do with the subscription',
+                    reply_markup=reply_markup
+                )
+                await state.update_data(s)
+                await subscriptions_state.set()
+
+    @dispatcher.callback_query_handler(
+        aiogram.filters.Text(equals='remove'), state=subscriptions_state)
+    async def delete_subscription(callback_query: aiogram.types.CallbackQuery, state: aiogram.dispatcher.FSMContext):
+        async with state.proxy() as data:
+            await store.remove_subscription(chat_id=callback_query.message.chat.id, group_id=data['group']['group_id'])
+        await callback_query.answer(text='Removed')
+        await state.reset_data()
+
+        text, reply_markup = await get_subscriptions_message(callback_query.message.chat.id)
+        await callback_query.message.edit_text(text=text, reply_markup=reply_markup)
+        await subscriptions_state.set()
 
     @dispatcher.message_handler(commands=['subscribe', ])
     async def subscribe(message: aiogram.types.Message):
