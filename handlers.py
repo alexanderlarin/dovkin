@@ -6,7 +6,7 @@ import logging
 import urllib.parse
 
 from aiogram.dispatcher.filters.state import State
-from jobs import send_post, sync_group_membership, walk_wall_posts, MAX_POSTS_COUNT
+from jobs import check_group_membership, send_post, sync_group_membership, walk_wall_posts, MAX_POSTS_COUNT
 from store import BaseStore
 
 logger = logging.getLogger(__name__)
@@ -14,6 +14,7 @@ logger = logging.getLogger(__name__)
 subscribe_url_state = State('subscribe_url')
 subscriptions_state = State('subscriptions_state')
 subscription_state = State('subscription_state')
+
 
 class Action(enum.Enum):
     back = 'back'
@@ -64,6 +65,8 @@ def apply_handlers(dispatcher: aiogram.Dispatcher, store: BaseStore, session: ai
     async def get_subscription(callback_query: aiogram.types.CallbackQuery, state: aiogram.dispatcher.FSMContext):
         async for s in store.get_subscriptions(chat_id=callback_query.message.chat.id):
             if s['group']['group_id'] == int(callback_query.data):
+                membership = await check_group_membership(api, group_id=s['group']['group_id'])
+
                 await callback_query.answer()
 
                 reply_markup = aiogram.types.InlineKeyboardMarkup(row_width=2)
@@ -71,7 +74,9 @@ def apply_handlers(dispatcher: aiogram.Dispatcher, store: BaseStore, session: ai
                 reply_markup.add(aiogram.types.InlineKeyboardButton(text='«Back', callback_data=Action.back.value))
 
                 await callback_query.message.edit_text(
-                    text=f'Here it is: {s["group"]["name"]}\nWhat do you want to do with the subscription',
+                    text=f'Here it is:'
+                         f'\n{s["group"]["url"]}'
+                         f'\nMembership: {membership.value.title()}',
                     reply_markup=reply_markup
                 )
                 await state.update_data(s)
@@ -140,12 +145,5 @@ def apply_handlers(dispatcher: aiogram.Dispatcher, store: BaseStore, session: ai
             logger.exception(ex)
 
             await message.reply(text='Something is wrong!...\nTry again or type /cancel ')
-
-    # @dispatcher.message_handler(commands=['unsubscribe', ])
-    # async def unsubscribe(message: aiogram.types.Message):
-    #     await store.remove_chat(chat_id=message.chat.id)
-    #     await bot.send_message(
-    #         message.chat.id, "Oh no!\nYou're unsubscribed")
-    #     logger.info(f'unsubscribe chat_id={message.chat.id}')
 
     return dispatcher
