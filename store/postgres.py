@@ -92,12 +92,22 @@ class PostgresDBStore(BaseStore):
             )
 
     async def get_subscriptions(self, chat_id=None):
-        async with self._pool.acquire() as connection:
-            async with connection.transaction():
-                async for item in connection.cursor(
-                        'SELECT chat_id, group_id, options::json FROM subscription WHERE $1::int IS NULL OR chat_id = $1',
-                        chat_id):
-                    yield {'chat_id': item['chat_id'], 'group_id': item['group_id'], **item['options']}
+        async with self._pool.acquire() as connection, connection.transaction():
+            async for item in connection.cursor(
+                    'SELECT s.chat_id, s.group_id, s.options::json, g.fields::json, g.is_member '
+                    'FROM subscription AS s '
+                    'LEFT JOIN "group" AS g ON s.group_id = g.group_id '
+                    'WHERE $1::int IS NULL OR chat_id = $1',
+                    chat_id):
+                yield {
+                    'chat_id': item['chat_id'],
+                    'group': {
+                        'group_id': item['group_id'],
+                        'is_member': item['is_member'],
+                        **item['fields']
+                    },
+                    **item['options']
+                }
 
     async def upsert_subscription(self, chat_id, group_id, **options):
         async with self._pool.acquire() as connection:
@@ -106,6 +116,13 @@ class PostgresDBStore(BaseStore):
                 'VALUES ($1, $2, $3::json)'
                 'ON CONFLICT (chat_id, group_id) DO UPDATE SET options = subscription.options || excluded.options',
                 chat_id, group_id, options
+            )
+
+    async def remove_subscription(self, chat_id, group_id):
+        async with self._pool.acquire() as connection:
+            return await connection.execute(
+                'DELETE FROM subscription WHERE chat_id = $1 AND group_id = $2',
+                chat_id, group_id
             )
 
     async def get_wall_posts(self, owner_id=None):
@@ -140,7 +157,10 @@ class PostgresDBStore(BaseStore):
                 '   WHERE chat_id = $1 AND post_id = wall_post.post_id AND owner_id = wall_post.owner_id'
                 ') ORDER BY date desc LIMIT 1',
                 chat_id, owner_id)
-            return {'post_id': item['post_id'], 'owner_id': item['owner_id'], 'date': item['date'], **item['fields']}
+            if item:
+                return {
+                    'post_id': item['post_id'], 'owner_id': item['owner_id'], 'date': item['date'], **item['fields']
+                }
 
     async def upsert_chat_wall_post(self, chat_id, post_id, owner_id, **fields):
         async with self._pool.acquire() as connection:

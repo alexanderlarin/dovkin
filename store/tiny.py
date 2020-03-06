@@ -76,11 +76,16 @@ class TinyDBStore(BaseStore):
 
     async def get_subscriptions(self, chat_id=None):
         for item in self.get_items('subscriptions', chat_id=chat_id):
-            yield item
+            group = self.groups.get(where('group_id') == item.pop('group_id'))
+            yield {'group': group, **item}
 
     async def upsert_subscription(self, chat_id, group_id, **options):
         keys = {'chat_id': chat_id, 'group_id': group_id}
         return self.subscriptions.upsert({**keys, **options}, self.get_filters(**keys))
+
+    async def remove_subscription(self, chat_id, group_id):
+        keys = {'chat_id': chat_id, 'group_id': group_id}
+        return self.subscriptions.remove(self.get_filters(**keys))
 
     async def upsert_wall_post(self, post_id, owner_id, **fields):
         keys = {'post_id': post_id, 'owner_id': owner_id}

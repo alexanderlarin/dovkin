@@ -30,6 +30,10 @@ class BaseStore(ABC):
         pass
 
     @abstractmethod
+    async def remove_subscription(self, chat_id, group_id):
+        pass
+
+    @abstractmethod
     async def get_wall_posts(self, owner_id=None):
         yield
 
