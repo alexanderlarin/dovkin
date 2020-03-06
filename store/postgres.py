@@ -157,7 +157,10 @@ class PostgresDBStore(BaseStore):
                 '   WHERE chat_id = $1 AND post_id = wall_post.post_id AND owner_id = wall_post.owner_id'
                 ') ORDER BY date desc LIMIT 1',
                 chat_id, owner_id)
-            return {'post_id': item['post_id'], 'owner_id': item['owner_id'], 'date': item['date'], **item['fields']}
+            if item:
+                return {
+                    'post_id': item['post_id'], 'owner_id': item['owner_id'], 'date': item['date'], **item['fields']
+                }
 
     async def upsert_chat_wall_post(self, chat_id, post_id, owner_id, **fields):
         async with self._pool.acquire() as connection:
