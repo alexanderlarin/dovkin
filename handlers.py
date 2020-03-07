@@ -94,7 +94,7 @@ def apply_handlers(dispatcher: aiogram.Dispatcher, store: BaseStore, session: ai
         await callback_query.message.edit_text(text=text, reply_markup=reply_markup)
         await subscriptions_state.set()
 
-    @dispatcher.message_handler(commands=['subscribe', ])
+    @dispatcher.message_handler(commands=['subscribe', ], state='*')
     async def subscribe(message: aiogram.types.Message):
         await store.upsert_chat(chat_id=message.chat.id, username=message.chat.username)
         await bot.send_message(
