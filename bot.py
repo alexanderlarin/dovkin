@@ -178,7 +178,7 @@ if __name__ == '__main__':
 
             try:
                 logger.info('start update_posts routine')
-                for item in store.get_groups():
+                async for item in store.get_groups():
                     if item['is_member']:
                         await walk_wall_posts(
                             jobs_vk_session, store, owner_id=-item['group_id'], max_offset=MAX_POSTS_COUNT)
