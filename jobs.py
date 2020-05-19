@@ -80,8 +80,9 @@ async def walk_wall_posts(session: aiovk.TokenSession, store: BaseStore, owner_i
         await store.upsert_wall_post(post_id=post_id, owner_id=owner_id, **fields)
 
         if not max_offset or offset < max_offset:
-            logger.info(f'walk store posts owner_id={owner_id}'
-                        f' count=[{await store.count_wall_posts(owner_id=owner_id)}/{count}], continue')
+            if not offset % MAX_POSTS_COUNT:
+                logger.info(f'walk store posts owner_id={owner_id}'
+                            f' count=[{await store.count_wall_posts(owner_id=owner_id)}/{count}], continue')
         else:
             logger.info(f'walk wall posts ends due to offset={offset}'
                         f' is greater than max_posts_offset={max_offset}, break')
